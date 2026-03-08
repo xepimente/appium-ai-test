@@ -1,0 +1,58 @@
+{
+  "name": "Appium AI Test",
+
+  "build": {
+    // Build context is the project root so post-create.sh can read requirements.txt
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // ── Docker run args ──────────────────────────────────────────────────────────
+  // --add-host wires host.docker.internal → host gateway on Linux hosts.
+  // Docker Desktop on Windows/macOS provides this automatically.
+  "runArgs": [
+    "--add-host=host.docker.internal:host-gateway"
+  ],
+
+  // ── Environment ─────────────────────────────────────────────────────────────
+  // ADB client inside the container talks to the ADB server on the host.
+  // The host manages the USB connection to the physical Android device.
+  "remoteEnv": {
+    "ANDROID_ADB_SERVER_ADDRESS": "host.docker.internal",
+    "ANDROID_ADB_SERVER_PORT": "5037",
+    "APPIUM_HOME": "/usr/local/share/appium"
+  },
+
+  // ── Ports ────────────────────────────────────────────────────────────────────
+  // Appium server (started manually inside the container)
+  "forwardPorts": [4723],
+  "portsAttributes": {
+    "4723": {
+      "label": "Appium Server",
+      "onAutoForward": "silent"
+    }
+  },
+
+  // ── Lifecycle hooks ──────────────────────────────────────────────────────────
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  // ── VS Code extensions ───────────────────────────────────────────────────────
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.pylance",
+        "ms-python.black-formatter",
+        "ms-python.debugpy",
+        "littlefoxteam.vscode-python-test-adapter",
+        "hbenl.vscode-test-explorer"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["src/tests"],
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
