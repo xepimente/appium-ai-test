@@ -15,12 +15,21 @@
   ],
 
   // ── Environment ─────────────────────────────────────────────────────────────
-  // ADB client inside the container talks to the ADB server on the host.
-  // The host manages the USB connection to the physical Android device.
+  // Wireless mode (default):
+  //   Set REMOTE_ADB=true and ANDROID_DEVICES in your .env file.
+  //   The container runs its own ADB server and connects to devices over TCP/IP.
+  //   Example: ANDROID_DEVICES=192.168.1.100:5555
+  //
+  // USB via host proxy (alternative):
+  //   Uncomment ANDROID_ADB_SERVER_ADDRESS below so the container's ADB client
+  //   forwards to the host ADB daemon that owns the USB connection.
   "remoteEnv": {
-    "ANDROID_ADB_SERVER_ADDRESS": "host.docker.internal",
-    "ANDROID_ADB_SERVER_PORT": "5037",
-    "APPIUM_HOME": "/usr/local/share/appium"
+    // "ANDROID_ADB_SERVER_ADDRESS": "host.docker.internal",
+    // "ANDROID_ADB_SERVER_PORT": "5037",
+    "APPIUM_HOME": "/usr/local/share/appium",
+    "REMOTE_ADB": "${localEnv:REMOTE_ADB}",
+    "ANDROID_DEVICES": "${localEnv:ANDROID_DEVICES}",
+    "REMOTE_ADB_POLLING_SEC": "${localEnv:REMOTE_ADB_POLLING_SEC}"
   },
 
   // ── Ports ────────────────────────────────────────────────────────────────────

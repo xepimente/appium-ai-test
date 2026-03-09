@@ -17,9 +17,9 @@ class AppiumConfig:
     port: int = field(default_factory=lambda: int(os.getenv("APPIUM_PORT", "4723")))
 
     # Android Device capabilities
-    device_udid: str = field(default_factory=lambda: os.getenv("DEVICE_UDID", "emulator-5554"))
-    device_name: str = field(default_factory=lambda: os.getenv("DEVICE_NAME", "Android Emulator"))
-    platform_version: str = field(default_factory=lambda: os.getenv("PLATFORM_VERSION", "13.0"))
+    device_udid: str = field(default_factory=lambda: os.getenv("DEVICE_UDID", ""))
+    device_name: str = field(default_factory=lambda: os.getenv("DEVICE_NAME", "Android Device"))
+    platform_version: str = field(default_factory=lambda: os.getenv("PLATFORM_VERSION", "14.0"))
     chrome_driver_version: str = field(default_factory=lambda: os.getenv("CHROME_DRIVER_VERSION", ""))
 
     @property
@@ -47,16 +47,12 @@ class AppiumConfig:
             # Chrome instead of launching an app package.
             "browserName": "Chrome",
 
-            # ── ChromeDriver ───────────────────────────────────────
-            # Appium needs ChromeDriver to control Chrome.
-            # The version must match Chrome on the device.
-            # Leave empty to let Appium auto-detect.
-            "appium:chromedriverExecutableDir": "/usr/local/lib/chromedriver",
-
             # ── Timeouts & Behavior ────────────────────────────────
-            "appium:newCommandTimeout": 120,   # Seconds before session expires
-            "appium:noReset": True,            # Don't reset app state between tests
-            "appium:autoGrantPermissions": True,  # Auto-grant Chrome permissions
+            "appium:newCommandTimeout": 120,          # Seconds before session expires
+            "appium:noReset": True,                    # Don't reset app state between tests
+            "appium:autoGrantPermissions": True,       # Auto-grant Chrome permissions
+            "appium:ignoreHiddenApiPolicyError": True, # Ignore WRITE_SECURE_SETTINGS error on physical devices
+            "appium:uiautomator2ServerLaunchTimeout": 60000,  # 60s for physical device instrumentation startup (default 30s)
         }
 
         if self.chrome_driver_version:

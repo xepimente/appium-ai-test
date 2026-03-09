@@ -8,13 +8,13 @@ echo "╚═══════════════════════�
 echo ""
 
 # ── Python dependencies ────────────────────────────────────────────────────────
-echo "[1/3] Installing Python dependencies..."
-sudo python3 -m pip install --no-cache-dir --upgrade --ignore-installed -r requirements.txt
+echo "[1/4] Installing Python dependencies..."
+sudo python3 -m pip install --no-cache-dir --upgrade --ignore-installed --break-system-packages -r requirements.txt
 echo "      Done."
 echo ""
 
 # ── Environment file ───────────────────────────────────────────────────────────
-echo "[2/3] Setting up .env..."
+echo "[2/4] Setting up .env..."
 if [ ! -f ".env" ]; then
     cp .env.example .env
     echo "      Created .env from .env.example — fill in your values."
@@ -23,8 +23,26 @@ else
 fi
 echo ""
 
+# ── Wireless ADB ───────────────────────────────────────────────────────────────
+echo "[3/4] Wireless ADB setup..."
+# Source .env for REMOTE_ADB / ANDROID_DEVICES so they are available
+# even if the host didn't export them before opening the devcontainer.
+if [ -f ".env" ]; then
+    eval "$(grep -v '^#' .env | grep -E '^(REMOTE_ADB|ANDROID_DEVICES|REMOTE_ADB_POLLING_SEC)=' | sed 's/^/export /')"
+fi
+if [ "${REMOTE_ADB}" = "true" ]; then
+    echo "      REMOTE_ADB=true — starting wireless ADB auto-connect..."
+    wireless_autoconnect.sh
+    wireless_connect.sh
+    echo "      Wireless auto-connect daemon started (polling every ${REMOTE_ADB_POLLING_SEC:-5}s)."
+else
+    echo "      REMOTE_ADB not set — skipping wireless auto-connect."
+    echo "      To enable: set REMOTE_ADB=true and ANDROID_DEVICES=<ip>:<port> in .env"
+fi
+echo ""
+
 # ── Verify tools ───────────────────────────────────────────────────────────────
-echo "[3/3] Verifying installed tools..."
+echo "[4/4] Verifying installed tools..."
 echo "      Python:  $(python3 --version)"
 echo "      Node:    $(node --version)"
 echo "      Java:    $(java -version 2>&1 | head -1)"
@@ -34,25 +52,27 @@ echo ""
 
 # ── Next steps ─────────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════════════════════════════════╗"
-echo "║  NEXT STEPS — Physical Android Device Setup                         ║"
+echo "║  NEXT STEPS — Wireless Android Device Setup                         ║"
 echo "║                                                                      ║"
-echo "║  On your HOST machine (outside this container):                      ║"
+echo "║  On your Android device (Developer Options):                         ║"
+echo "║    Android 11+:  Enable 'Wireless Debugging', note the ip:port       ║"
+echo "║    Android ≤10:  Connect USB once, run 'adb tcpip 5555',             ║"
+echo "║                  disconnect USB, use ip:5555                         ║"
 echo "║                                                                      ║"
-echo "║  1. Connect Android phone via USB with USB Debugging enabled         ║"
-echo "║  2. Accept the RSA key prompt on the phone                           ║"
-echo "║  3. Verify connection:  adb devices                                  ║"
-echo "║     (run this on your HOST, not inside the container)                ║"
+echo "║  In your .env file (project root):                                   ║"
+echo "║    REMOTE_ADB=true                                                   ║"
+echo "║    ANDROID_DEVICES=<device-ip>:<port>                                ║"
 echo "║                                                                      ║"
-echo "║  Inside this container, ADB connects to your host's ADB daemon       ║"
-echo "║  automatically via host.docker.internal — no extra steps needed.     ║"
+echo "║  Inside this container ADB connects directly to the device over      ║"
+echo "║  WiFi — no USB or host ADB daemon needed.                            ║"
 echo "║                                                                      ║"
-echo "║  To verify the device is visible inside the container:               ║"
+echo "║  Verify the device is visible:                                       ║"
 echo "║    adb devices                                                       ║"
 echo "║                                                                      ║"
-echo "║  To start Appium server (in a separate terminal):                    ║"
+echo "║  Start Appium server (separate terminal):                            ║"
 echo "║    appium --port 4723 --log-level info                               ║"
 echo "║                                                                      ║"
-echo "║  To run tests:                                                       ║"
+echo "║  Run tests:                                                          ║"
 echo "║    pytest src/tests/ -v --html=reports/report.html                   ║"
 echo "╚══════════════════════════════════════════════════════════════════════╝"
 echo ""
