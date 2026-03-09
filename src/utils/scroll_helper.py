@@ -17,6 +17,7 @@ We use W3C Actions API as it's the most reliable and cross-platform.
 """
 
 import time
+import random
 from typing import Generator
 from loguru import logger
 
@@ -52,35 +53,63 @@ class ScrollHelper:
 
     def _perform_swipe_up(self) -> None:
         """
-        Simulate a finger swipe UP gesture to scroll the page DOWN.
+        Simulate a human finger swipe UP gesture to scroll the page DOWN.
+
+        Mimics realistic human behaviour:
+          - Slight randomness in touch position so every swipe is not identical
+          - Touch-down pause before movement begins (humans hesitate briefly)
+          - Movement broken into small interpolated steps so the finger visibly
+            travels across the screen rather than teleporting
+          - Gentle deceleration at the end of the swipe (ease-out feel)
+          - Post-swipe pause lets the page momentum animation settle
 
         On a touchscreen:
           - Swipe UP = content moves UP = user sees content further DOWN the page
-          - Start point: lower area of screen (e.g., 70% from top)
-          - End point:   upper area of screen (e.g., 20% from top)
+          - Start point: lower area of screen (~70% from top)
+          - End point:   upper area of screen (~20% from top)
         """
-        start_x = self.width // 2
-        start_y = int(self.height * 0.70)
-        end_y = int(self.height * 0.20)
+        # Slight horizontal drift so swipes don't all land on the exact centre
+        x_drift = random.randint(-15, 15)
+        start_x = self.width // 2 + x_drift
 
-        # W3C Actions: Create a pointer (finger) input
+        # Randomise start/end Y slightly so each swipe feels distinct
+        start_y = int(self.height * random.uniform(0.65, 0.75))
+        end_y   = int(self.height * random.uniform(0.18, 0.25))
+
+        # Total swipe travel in pixels, broken into steps.
+        # More steps = smoother, more human-like movement.
+        steps = 20
+        distance = start_y - end_y
+
+        # Swipe duration: realistic human scroll is roughly 0.4–0.8 seconds of
+        # finger movement.  Divide evenly across steps.
+        swipe_duration = random.uniform(0.4, 0.8)
+        step_pause = swipe_duration / steps
+
         finger = PointerInput(interaction.POINTER_TOUCH, "finger")
         actions = ActionBuilder(self.driver, mouse=finger)
 
-        # Press finger at start position
+        # Touch down and hold briefly before moving (human reaction time)
         actions.pointer_action.move_to_location(start_x, start_y)
         actions.pointer_action.pointer_down()
-        # Pause briefly to register the touch
-        actions.pointer_action.pause(0.1)
-        # Move finger to end position (scroll up gesture)
-        actions.pointer_action.move_to_location(start_x, end_y)
-        # Pause to let scroll register
-        actions.pointer_action.pause(0.1)
+        actions.pointer_action.pause(random.uniform(0.08, 0.18))
+
+        # Interpolate finger movement with ease-out deceleration:
+        # early steps cover more distance, later steps slow down.
+        for i in range(1, steps + 1):
+            # Ease-out curve: progress accelerates early, slows near the end
+            t = i / steps
+            eased = 1 - (1 - t) ** 2          # quadratic ease-out
+            current_y = int(start_y - distance * eased)
+            actions.pointer_action.move_to_location(start_x, current_y)
+            actions.pointer_action.pause(step_pause)
+
         # Lift finger
         actions.pointer_action.pointer_up()
 
         actions.perform()
-        time.sleep(self.pause)  # Wait for scroll animation to complete
+        # Let the page momentum animation settle before the next action
+        time.sleep(self.pause)
 
     def scroll_to_top(self) -> None:
         """Navigate to the very top of the page."""

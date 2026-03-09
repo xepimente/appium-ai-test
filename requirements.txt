@@ -1,8 +1,8 @@
 # Core Appium
 Appium-Python-Client==5.2.7
 
-# Anthropic Claude LLM
-anthropic>=0.40.0
+# Ollama local LLM
+ollama>=0.3.0
 
 # Testing framework
 pytest==8.2.2

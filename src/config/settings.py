@@ -53,6 +53,12 @@ class AppiumConfig:
             "appium:autoGrantPermissions": True,       # Auto-grant Chrome permissions
             "appium:ignoreHiddenApiPolicyError": True, # Ignore WRITE_SECURE_SETTINGS error on physical devices
             "appium:uiautomator2ServerLaunchTimeout": 60000,  # 60s for physical device instrumentation startup (default 30s)
+
+            # ── Human-like behaviour ───────────────────────────────
+            # UiAutomator2 disables all Android animations by default for speed.
+            # Setting this to False keeps system animations enabled so gestures
+            # look and feel like a real user interacting with the device.
+            "appium:disableWindowAnimation": False,
         }
 
         if self.chrome_driver_version:
@@ -63,17 +69,21 @@ class AppiumConfig:
 
 @dataclass
 class LLMConfig:
-    """Claude LLM configuration."""
-    api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
-    model: str = field(default_factory=lambda: os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514"))
+    """Ollama local LLM configuration."""
+    host: str = field(default_factory=lambda: os.getenv("OLLAMA_HOST", "http://host.docker.internal:11434"))
+    model: str = field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "llava:13b"))
     max_tokens: int = 2048
 
     def validate(self):
-        if not self.api_key:
+        import requests
+        try:
+            response = requests.get(f"{self.host}/api/tags", timeout=5)
+            response.raise_for_status()
+        except Exception as e:
             raise ValueError(
-                "ANTHROPIC_API_KEY is not set. "
-                "Add it to your .env file or export it as an environment variable."
-            )
+                f"Cannot reach Ollama at {self.host}. "
+                "Make sure Ollama is running: `ollama serve`"
+            ) from e
 
 
 @dataclass

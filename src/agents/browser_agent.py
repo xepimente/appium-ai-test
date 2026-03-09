@@ -29,7 +29,7 @@ from loguru import logger
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, InvalidArgumentException
 from appium.webdriver.webdriver import WebDriver
 
 from src.llm.claude_client import ClaudeClient
@@ -248,10 +248,10 @@ class BrowserAgent:
     def _find_search_box(self):
         """Try multiple selectors to find the Google search input."""
         selectors = [
-            (By.NAME, "q"),                          # Standard Google search
-            (By.CSS_SELECTOR, "input[type='text']"), # Generic text input
-            (By.CSS_SELECTOR, "textarea[name='q']"), # Google's textarea search
-            (By.ID, "APjFqb"),                        # Google search box ID
+            (By.NAME, "q"),                           # Standard Google search
+            (By.CSS_SELECTOR, 'textarea[name="q"]'),  # Google's textarea search box
+            (By.CSS_SELECTOR, 'input[type="text"]'),  # Generic text input
+            (By.ID, "APjFqb"),                         # Google search box ID
         ]
 
         for by, selector in selectors:
@@ -260,7 +260,7 @@ class BrowserAgent:
                 if element.is_displayed():
                     logger.debug(f"Found search box via: {by}={selector}")
                     return element
-            except NoSuchElementException:
+            except (NoSuchElementException, InvalidArgumentException):
                 continue
 
         return None
@@ -268,10 +268,10 @@ class BrowserAgent:
     def _dismiss_cookie_consent(self) -> None:
         """Dismiss Google's cookie consent dialog if it appears."""
         consent_selectors = [
-            (By.ID, "L2AGLb"),                       # Google "Accept all"
-            (By.XPATH, "//button[contains(., 'Accept')]"),
-            (By.XPATH, "//button[contains(., 'Agree')]"),
-            (By.CSS_SELECTOR, "button#accept"),
+            (By.ID, "L2AGLb"),                                              # Google "Accept all" button id
+            (By.XPATH, "//button[contains(normalize-space(), 'Accept')]"),  # Generic accept button
+            (By.XPATH, "//button[contains(normalize-space(), 'Agree')]"),   # Generic agree button
+            (By.CSS_SELECTOR, "#accept"),                                    # Any element with id="accept"
         ]
 
         for by, selector in consent_selectors:
@@ -282,7 +282,7 @@ class BrowserAgent:
                     logger.info("Dismissed cookie consent")
                     time.sleep(1)
                     return
-            except NoSuchElementException:
+            except (NoSuchElementException, InvalidArgumentException):
                 continue
 
     def _parse_json_response(self, text: str) -> Optional[dict]:

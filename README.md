@@ -193,7 +193,10 @@ cp .env.example .env
 
 ```bash
 # In a separate terminal window:
-appium --port 4723 --log-level info
+# --allow-insecure chromedriver_autodownload ensures the correct ChromeDriver
+# version is downloaded or updated automatically to match the Chrome version on
+# the connected device.
+appium --port 4723 --log-level info --allow-insecure uiautomator2:chromedriver_autodownload
 
 # Appium server should say:
 # Appium REST http interface listener started on 0.0.0.0:4723
@@ -201,7 +204,19 @@ appium --port 4723 --log-level info
 
 ---
 
-### Step 8 — Run the Tests
+### Step 8 — Verify Android Connection
+
+Before running the full test suite, confirm that Appium can connect to your Android device:
+
+```bash
+pytest src/tests/test_browser_search.py::TestBrowserLaunch -v
+```
+
+A passing result means the device is reachable, ADB is working, and Appium can launch Chrome successfully.
+
+---
+
+### Step 9 — Run the Tests
 
 ```bash
 # Activate venv first
