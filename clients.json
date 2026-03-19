@@ -1,0 +1,53 @@
+[
+  {
+    "id": 0,
+    "biz_name": "Mae's Childcare",
+    "plan": "Monthly-Pro",
+    "city": "San Francisco",
+    "state": "California",
+    "address": "San Francisco, CA, USA",
+    "biz_url": "https://www.maeschildcare.com",
+    "gmb_url": "",
+    "keywords": [
+      "bilingual childcare San Francisco",
+      "childcare Alamo Square",
+      "infant care San Francisco",
+      "preschool San Francisco",
+      "after school care San Francisco"
+    ]
+  },
+  {
+    "id": 1,
+    "biz_name": "Bupp Contracting & Remodeling LLC",
+    "plan": "Monthly-Pro",
+    "city": "Frederick",
+    "state": "Maryland",
+    "address": "801 Toll House Avenue, Frederick, MD 21701-4564, USA",
+    "biz_url": "",
+    "gmb_url": "https://maps.app.goo.gl/Y3AmHjRT2eChwW3Q6",
+    "keywords": [
+      "Bupp Contracting & Remodeling LLC",
+      "Bupp Contracting & Remodeling LLC Free Roof Estimate",
+      "Bupp Contracting & Remodeling LLC Roofing Company Frederick",
+      "Bupp Contracting & Remodeling LLC Flat Roof Repair",
+      "Bupp Contracting & Remodeling LLC Roof Leak Repair"
+    ]
+  },
+  {
+    "id": 2,
+    "biz_name": "Tx Home Buying Pros",
+    "plan": "Monthly-Agency Pro",
+    "city": "Garland",
+    "state": "Texas",
+    "address": "206 West Ridgewood Drive, Garland, TX 75041-3036, USA",
+    "biz_url": "",
+    "gmb_url": "https://maps.app.goo.gl/DB4Yd32BfCuUVRFv7",
+    "keywords": [
+      "sell house for cash",
+      "buy my house cash",
+      "sell my house fast",
+      "cash home buyers",
+      "cash for houses"
+    ]
+  }
+]

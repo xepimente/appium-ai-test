@@ -1,0 +1,22 @@
+{
+  "2026-03-19": {
+    "device-001": {
+      "0:bilingual childcare San Francisco": {
+        "client_id": 0,
+        "keyword": "bilingual childcare San Francisco",
+        "platform": "Perplexity",
+        "status": "started",
+        "timestamp": "2026-03-19T04:19:31.353900Z"
+      }
+    },
+    "device-002": {
+      "1:Bupp Contracting & Remodeling LLC": {
+        "client_id": 1,
+        "keyword": "Bupp Contracting & Remodeling LLC",
+        "platform": "ChatGPT",
+        "status": "started",
+        "timestamp": "2026-03-19T04:19:31.355113Z"
+      }
+    }
+  }
+}

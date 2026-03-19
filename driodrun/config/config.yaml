@@ -1,0 +1,47 @@
+# AEO DroidRun Configuration
+# --------------------------
+
+agent:
+  max_steps: 35
+  reasoning: false
+  vision: false
+  after_sleep_action: 0.5
+  wait_for_stable_ui: 0.3
+  app_cards:
+    enabled: true
+    app_cards_dir: config/app_cards
+
+device:
+  platform: android
+  # serial: null means auto-detect; override per-device in code
+  serial: null
+
+llm_profiles:
+  fast_agent:
+    provider: DeepSeek
+    model: deepseek-chat
+    temperature: 0.0
+  manager:
+    provider: DeepSeek
+    model: deepseek-chat
+    temperature: 0.1
+  executor:
+    provider: DeepSeek
+    model: deepseek-chat
+    temperature: 0.0
+  text_manipulator:
+    provider: DeepSeek
+    model: deepseek-chat
+    temperature: 0.8
+  app_opener:
+    provider: DeepSeek
+    model: deepseek-chat
+    temperature: 0.0
+  scripter:
+    provider: DeepSeek
+    model: deepseek-chat
+    temperature: 0.0
+
+logging:
+  save_trajectory: step
+  trajectory_gifs: trajectories

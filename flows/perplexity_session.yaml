@@ -1,0 +1,121 @@
+# AEO Session — Static YAML
+# Variables passed via --env flags:
+#   PLATFORM_URL    → target AI platform URL
+#   PLATFORM_NAME   → name to search e.g. "Gemini AI", "ChatGPT", "Perplexity AI"
+#   PLATFORM_DOMAIN → domain shown in search result e.g. "gemini.google.com"
+#   PROMPT          → the seeding prompt text
+#   FOLLOW_UP       → follow-up prompt (empty string if none)
+#   DEVICE_ID       → device identifier for logging
+
+appId: com.android.chrome
+---
+# Launch Chrome fresh — clear state every session
+- launchApp:
+    clearState: false
+
+# Dismiss any first-run Chrome dialogs
+- tapOn:
+    text: "Use without an account"
+    optional: true
+- tapOn:
+    text: "Got it"
+    optional: true
+- tapOn:
+    text: "Stay signed out"
+    optional: true
+
+- waitForAnimationToEnd
+
+# Tap the address/search bar
+- tapOn:
+    text: ^Search.*
+- waitForAnimationToEnd
+
+# Type the platform name as a Google search — like a real user
+- inputText: "${PLATFORM_NAME}"
+- pressKey: Enter
+- waitForAnimationToEnd
+
+# Dismiss Chrome address bar tooltip if it appears
+- tapOn:
+    text: ".*touch and hold.*"
+    optional: true
+- waitForAnimationToEnd
+
+# Tap the 2nd organic result (skipping sponsored)
+- scrollUntilVisible:
+    element: "Search Results"
+    direction: DOWN
+
+- tapOn:
+    text: ".*"
+    below: "Search Results"
+    index: 1
+
+# Dismiss Comet promo modals (may show 0, 1, or 2)
+- extendedWaitUntil:
+    visible: ".*perplexity.*"
+    timeout: 10000
+
+# First modal - "Comet iOS is now available"
+- tapOn:
+    text: "Close"
+    optional: true
+
+- waitForAnimationToEnd
+
+# Second modal - "Get Comet for your phone"  
+- tapOn:
+    text: "Close"
+    optional: true
+# - tapOn:
+#     text: "Dismiss"
+#     optional: true
+# - tapOn:
+#     id: "close-button"
+#     optional: true
+# - tapOn:
+#     text: "Got it"
+#     optional: true
+# - tapOn:
+#     text: "Not now"
+#     optional: true
+
+- waitForAnimationToEnd
+
+# Tap the input to focus it
+- tapOn:
+    id: "ask-input"
+
+- waitForAnimationToEnd
+
+# Now type
+- inputText: "${PROMPT}"
+- waitForAnimationToEnd
+# Submit
+- tapOn:
+    text: "Submit"
+
+# # Scroll through the AI response — simulates human reading
+# - repeat:
+#     times: 5
+#     commands:
+#       - scroll
+#       - waitForAnimationToEnd
+
+# # ── Follow-up (only runs if FOLLOW_UP is not empty) ──────────────────────────
+# - runFlow:
+#     when:
+#       true: ${FOLLOW_UP !== ""}
+#     commands:
+#       - tapOn:
+#           text: ^Ask.*
+#           optional: true
+#       - inputText: "${FOLLOW_UP}"
+#       - tapOn:
+#           text: "Send Message"
+#       - repeat:
+#           times: 5
+#           commands:
+#             - scroll
+#             - waitForAnimationToEnd
