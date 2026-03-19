@@ -33,13 +33,12 @@ def build_session_goal(platform, prompt, follow_up):
     domain = PLATFORM_DOMAINS.get(platform, "gemini.google.com")
 
     goal = (
-        f"Open Chrome browser. "
-        f"Tap the address bar at the top, type 'google.com' and press Enter to open Google. "
-        f"Then tap the search bar on Google and type '{name}' then press Enter. "
+        f"Launch the Chrome browser app using package name 'com.android.chrome'. "
+        f"Once Chrome is open, tap the address bar at the top and type '{name}' then press Enter. "
+        f"Chrome will search Google automatically. "
         f"IMPORTANT: If you see a CAPTCHA page ('Our systems have detected unusual traffic', "
-        f"'I'm not a robot', or any image verification challenge), do NOT try to solve it and do NOT switch browsers. "
-        f"Instead, tap the address bar, type 'google.com' and press Enter to reload Google, then search for '{name}' again. "
-        f"Always stay in Chrome — do not open any other browser. "
+        f"'I'm not a robot', or any image verification challenge), do NOT try to solve it and do NOT press the HOME button. "
+        f"Instead, tap the Chrome address bar, type '{name}' again and press Enter to retry. "
         f"You are now on Google search results. "
         f"IMPORTANT: Do NOT tap on any sponsored or ad results at the top. "
         f"Scroll down past any ads and find the organic (non-sponsored) search result "

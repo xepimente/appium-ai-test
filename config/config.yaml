@@ -43,4 +43,4 @@ llm_profiles:
     temperature: 0.0
 
 logging:
-  save_trajectory: false
+  save_trajectory: "none"
