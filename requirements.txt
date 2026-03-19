@@ -1,0 +1,2 @@
+droidrun[deepseek]
+llama-index-llms-openai-like

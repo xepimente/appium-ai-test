@@ -1,0 +1,32 @@
+{
+  "device-001": {
+    "serial": "0B64C27G22100FA1"
+  },
+  "device-002": {
+    "serial": "0B64C27G23101E10"
+  },
+  "device-003": {
+    "serial": "10HFBBFEBZ000RA"
+  },
+  "device-004": {
+    "serial": "147263758M001636"
+  },
+  "device-005": {
+    "serial": "1490455613010287"
+  },
+  "device-006": {
+    "serial": "323952008165"
+  },
+  "device-007": {
+    "serial": "324651961440"
+  },
+  "device-011": {
+    "serial": "R83L103VCVH"
+  },
+  "device-012": {
+    "serial": "R83L112EVWK"
+  },
+  "device-013": {
+    "serial": "c0897ffc"
+  }
+}

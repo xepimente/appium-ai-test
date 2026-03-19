@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(adb devices:*)",
+      "Bash(scrcpy --version)",
+      "Bash(python3:*)"
+    ]
+  }
+}

@@ -1,0 +1,223 @@
+[
+  {
+    "id": 0,
+    "biz_name": "Mae's Childcare",
+    "plan": "Monthly-Pro",
+    "city": "San Francisco",
+    "state": "California",
+    "address": "San Francisco, CA, USA",
+    "biz_url": "https://www.maeschildcare.com",
+    "gmb_url": "",
+    "keywords": [
+      "bilingual childcare San Francisco",
+      "childcare Alamo Square",
+      "infant care San Francisco",
+      "preschool San Francisco",
+      "after school care San Francisco"
+    ]
+  },
+  {
+    "id": 1,
+    "biz_name": "Bupp Contracting & Remodeling LLC",
+    "plan": "Monthly-Pro",
+    "city": "Frederick",
+    "state": "Maryland",
+    "address": "801 Toll House Avenue, Frederick, MD 21701-4564, USA",
+    "biz_url": "",
+    "gmb_url": "https://maps.app.goo.gl/Y3AmHjRT2eChwW3Q6",
+    "keywords": [
+      "Bupp Contracting & Remodeling LLC",
+      "Bupp Contracting & Remodeling LLC Free Roof Estimate",
+      "Bupp Contracting & Remodeling LLC Roofing Company Frederick",
+      "Bupp Contracting & Remodeling LLC Flat Roof Repair",
+      "Bupp Contracting & Remodeling LLC Roof Leak Repair"
+    ]
+  },
+  {
+    "id": 2,
+    "biz_name": "Tx Home Buying Pros",
+    "plan": "Monthly-Agency Pro",
+    "city": "Garland",
+    "state": "Texas",
+    "address": "206 West Ridgewood Drive, Garland, TX 75041-3036, USA",
+    "biz_url": "",
+    "gmb_url": "https://maps.app.goo.gl/DB4Yd32BfCuUVRFv7",
+    "keywords": [
+      "sell house for cash",
+      "buy my house cash",
+      "sell my house fast",
+      "cash home buyers",
+      "cash for houses"
+    ]
+  },
+  {
+    "id": 3,
+    "biz_name": "Austin Dental Studio",
+    "plan": "Monthly-Pro",
+    "city": "Austin",
+    "state": "Texas",
+    "address": "2100 West Ben White Boulevard, Austin, TX 78704, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "dentist Austin TX",
+      "teeth whitening Austin",
+      "emergency dentist Austin",
+      "dental implants Austin Texas",
+      "family dentist South Austin"
+    ]
+  },
+  {
+    "id": 4,
+    "biz_name": "Pacific Ridge Landscaping",
+    "plan": "Monthly-Pro",
+    "city": "Seattle",
+    "state": "Washington",
+    "address": "Seattle, WA, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "landscaping company Seattle",
+      "lawn care service Seattle WA",
+      "landscape design Seattle",
+      "yard cleanup Seattle",
+      "sprinkler installation Seattle"
+    ]
+  },
+  {
+    "id": 5,
+    "biz_name": "Bright Path HVAC",
+    "plan": "Monthly-Pro",
+    "city": "Phoenix",
+    "state": "Arizona",
+    "address": "Phoenix, AZ, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "AC repair Phoenix AZ",
+      "HVAC service Phoenix",
+      "air conditioning installation Phoenix",
+      "furnace repair Phoenix",
+      "emergency AC repair Phoenix"
+    ]
+  },
+  {
+    "id": 6,
+    "biz_name": "Harbor View Auto Body",
+    "plan": "Monthly-Pro",
+    "city": "San Diego",
+    "state": "California",
+    "address": "San Diego, CA, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "auto body shop San Diego",
+      "collision repair San Diego",
+      "car paint shop San Diego",
+      "dent removal San Diego",
+      "auto body repair near me San Diego"
+    ]
+  },
+  {
+    "id": 7,
+    "biz_name": "Metro Plumbing Solutions",
+    "plan": "Monthly-Agency Pro",
+    "city": "Chicago",
+    "state": "Illinois",
+    "address": "Chicago, IL, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "plumber Chicago IL",
+      "emergency plumber Chicago",
+      "pipe repair Chicago",
+      "drain cleaning Chicago",
+      "water heater installation Chicago"
+    ]
+  },
+  {
+    "id": 8,
+    "biz_name": "Sunrise Yoga & Wellness",
+    "plan": "Monthly-Pro",
+    "city": "Denver",
+    "state": "Colorado",
+    "address": "Denver, CO, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "yoga studio Denver",
+      "hot yoga Denver CO",
+      "meditation classes Denver",
+      "yoga classes near me Denver",
+      "beginner yoga Denver"
+    ]
+  },
+  {
+    "id": 9,
+    "biz_name": "Clearwater Pool Services",
+    "plan": "Monthly-Pro",
+    "city": "Tampa",
+    "state": "Florida",
+    "address": "Tampa, FL, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "pool cleaning service Tampa",
+      "pool repair Tampa FL",
+      "pool maintenance company Tampa",
+      "swimming pool service Tampa",
+      "pool resurfacing Tampa"
+    ]
+  },
+  {
+    "id": 10,
+    "biz_name": "Golden Gate Moving Co",
+    "plan": "Monthly-Pro",
+    "city": "Oakland",
+    "state": "California",
+    "address": "Oakland, CA, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "moving company Oakland CA",
+      "local movers Oakland",
+      "cheap movers Oakland",
+      "residential moving Oakland",
+      "furniture movers Oakland"
+    ]
+  },
+  {
+    "id": 11,
+    "biz_name": "Lakeside Pet Hospital",
+    "plan": "Monthly-Pro",
+    "city": "Minneapolis",
+    "state": "Minnesota",
+    "address": "Minneapolis, MN, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "veterinarian Minneapolis",
+      "animal hospital Minneapolis",
+      "emergency vet Minneapolis",
+      "pet clinic Minneapolis MN",
+      "dog vet near me Minneapolis"
+    ]
+  },
+  {
+    "id": 12,
+    "biz_name": "Prestige Roofing Group",
+    "plan": "Monthly-Agency Pro",
+    "city": "Atlanta",
+    "state": "Georgia",
+    "address": "Atlanta, GA, USA",
+    "biz_url": "",
+    "gmb_url": "",
+    "keywords": [
+      "roofing company Atlanta GA",
+      "roof replacement Atlanta",
+      "roof repair Atlanta",
+      "storm damage roof Atlanta",
+      "best roofer Atlanta"
+    ]
+  }
+]
