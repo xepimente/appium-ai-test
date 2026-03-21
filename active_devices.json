@@ -1,0 +1,22 @@
+{
+  "device-001": {
+    "serial": "0B64C27G22100FA1",
+    "port": 4723
+  },
+  "device-002": {
+    "serial": "10HFBBFEBZ000RA",
+    "port": 4724
+  },
+  "device-005": {
+    "serial": "324651961440",
+    "port": 4727
+  },
+  "device-007": {
+    "serial": "R83L103VCVH",
+    "port": 4729
+  },
+  "device-008": {
+    "serial": "R83L112EVWK",
+    "port": 4730
+  }
+}
