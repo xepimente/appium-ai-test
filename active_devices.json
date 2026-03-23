@@ -1,22 +1,51 @@
 {
   "device-001": {
-    "serial": "0B64C27G22100FA1",
-    "port": 4723
+    "serial": "149145555W001028",
+    "port": 4723,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "X6725"
   },
   "device-002": {
-    "serial": "10HFBBFEBZ000RA",
-    "port": 4724
+    "serial": "149145555W002563",
+    "port": 4724,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "X6725"
+  },
+  "device-003": {
+    "serial": "149145555W002883",
+    "port": 4725,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "X6725"
+  },
+  "device-004": {
+    "serial": "149145555W005208",
+    "port": 4726,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "X6725"
   },
   "device-005": {
-    "serial": "324651961440",
-    "port": 4727
+    "serial": "149145555W006477",
+    "port": 4727,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "X6725"
+  },
+  "device-006": {
+    "serial": "149145555W006589",
+    "port": 4728,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "X6725"
   },
   "device-007": {
-    "serial": "R83L103VCVH",
-    "port": 4729
-  },
-  "device-008": {
-    "serial": "R83L112EVWK",
-    "port": 4730
+    "serial": "149145555W006788",
+    "port": 4729,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "X6725"
   }
 }

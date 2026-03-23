@@ -339,6 +339,7 @@ def plan_sessions(max_clients=None):
                     "serial":      short_serial,
                     "full_serial": full_serial,
                     "port":        port,
+                    "use_adb":     dev_info.get("use_adb", False),
                 })
 
                 device_clients_claimed[did].add(client["id"])

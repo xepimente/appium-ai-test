@@ -61,7 +61,7 @@ def adb_scroll(serial, swipes=12, px=400, duration_ms=700, pause_s=2.2):
     for i in range(swipes):
         subprocess.run(
             ["adb", "-s", serial, "shell",
-             "input", "swipe", "360", str(start_y), "360", str(end_y), str(duration_ms)],
+             "input", "swipe", "15", str(start_y), "15", str(end_y), str(duration_ms)],
             capture_output=True, timeout=10,
         )
         time.sleep(pause_s)
@@ -90,7 +90,7 @@ def switch_to_native(driver):
 # ── Native Element Helpers (for Chrome UI) ────────────────────────────────────
 
 def tap_optional(driver, by, value, timeout=3):
-    """Tap an element if present, silently skip if not found."""
+    """Tap an element if present, silently skip if not found or on any error."""
     try:
         el = WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((by, value))
@@ -98,7 +98,7 @@ def tap_optional(driver, by, value, timeout=3):
         el.click()
         time.sleep(0.5)
         return True
-    except (TimeoutException, NoSuchElementException):
+    except Exception:
         return False
 
 
@@ -136,6 +136,12 @@ def dismiss_first_run_dialogs(driver):
                  'new UiSelector().text("Continue")', timeout=2)
     tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
                  'new UiSelector().text("Got it")', timeout=2)
+
+    # Second pass: some devices show notifications AFTER ad privacy (e.g. Infinix)
+    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                 'new UiSelector().text("No thanks")', timeout=3)
+    tap_optional(driver, AppiumBy.ID,
+                 "com.android.chrome:id/negative_button", timeout=2)
     time.sleep(0.5)
 
 

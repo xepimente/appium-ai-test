@@ -122,15 +122,41 @@ def check_appium_connect(full_serial, port):
         return False
 
 
+def get_device_model(full_serial):
+    """Get device brand and model."""
+    try:
+        brand = subprocess.run(
+            ["adb", "-s", full_serial, "shell", "getprop", "ro.product.brand"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        model = subprocess.run(
+            ["adb", "-s", full_serial, "shell", "getprop", "ro.product.model"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        return brand, model
+    except Exception:
+        return "", ""
+
+
+# Devices that can't run Appium UiAutomator2 — use ADB-only flows
+ADB_ONLY_BRANDS = {"infinix", "tecno"}
+
+
 def check_one_device(args):
     """Check one device. Returns result dict."""
     label, full_serial, short_serial, port, check_only, assign_mode = args
+
+    brand, model = get_device_model(full_serial)
+    use_adb = brand.lower() in ADB_ONLY_BRANDS
 
     result = {
         "label":        label,
         "serial":       short_serial,
         "full_serial":  full_serial,
         "port":         port,
+        "brand":        brand,
+        "model":        model,
+        "use_adb":      use_adb,
         "inject_ok":    False,
         "appium_ok":    None,
         "status":       "unknown",
@@ -140,33 +166,39 @@ def check_one_device(args):
     inject_ok           = check_inject(full_serial)
     result["inject_ok"] = inject_ok
 
-    # Check 2: Appium connection test (skipped in --check mode)
-    if not check_only:
+    # Check 2: Appium connection test (skipped for ADB-only devices and --check mode)
+    if use_adb:
+        # ADB-only devices skip Appium test — just need inject_ok
+        appium_ok = None
+        result["appium_ok"] = None
+    elif not check_only:
         appium_ok           = check_appium_connect(full_serial, port)
         result["appium_ok"] = appium_ok
     else:
         appium_ok = None
 
+    mode_label = "ADB-only" if use_adb else "Appium"
+
     if assign_mode:
         issues = []
         if not inject_ok:
             issues.append("USB debugging (Security Settings) OFF")
-        if appium_ok is False:
+        if appium_ok is False and not use_adb:
             issues.append(f"Appium FAILED on port {port}")
 
         if not issues:
-            print(f"  OK   {label} ({short_serial[:24]}) port:{port} → assigned")
+            print(f"  OK   {label} ({short_serial[:24]}) port:{port} [{mode_label}] {brand} {model} → assigned")
             result["status"] = "ok"
         else:
-            print(f"  FAIL {label} ({short_serial[:24]}) port:{port} → {', '.join(issues)}")
+            print(f"  FAIL {label} ({short_serial[:24]}) port:{port} [{mode_label}] → {', '.join(issues)}")
             result["status"] = "failed"
         return result
 
     inject_note = "OK" if inject_ok else "NEEDS FIX"
-    appium_note = "OK" if appium_ok else ("SKIPPED" if appium_ok is None else "FAILED")
+    appium_note = "OK" if appium_ok else ("ADB-only" if use_adb else ("SKIPPED" if appium_ok is None else "FAILED"))
     ok          = inject_ok and (appium_ok is not False)
 
-    print(f"  [{'OK' if ok else 'ISSUE'}] {label} ({short_serial[:24]}) port:{port} | inject:{inject_note} | appium:{appium_note}")
+    print(f"  [{'OK' if ok else 'ISSUE'}] {label} ({short_serial[:24]}) port:{port} [{mode_label}] | inject:{inject_note} | {appium_note}")
     result["status"] = "ok" if ok else "failed"
     return result
 
@@ -219,8 +251,11 @@ def main(check_only=False, assign_mode=False):
     if assign_mode:
         active = {
             r["label"]: {
-                "serial": r["serial"],
-                "port":   r["port"],
+                "serial":  r["serial"],
+                "port":    r["port"],
+                "use_adb": r.get("use_adb", False),
+                "brand":   r.get("brand", ""),
+                "model":   r.get("model", ""),
             }
             for r in results
             if r["status"] == "ok"

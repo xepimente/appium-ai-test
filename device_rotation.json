@@ -1,132 +1,137 @@
 {
-  "2026-03-22": {
+  "2026-03-23": {
     "device-001": {
       "0:bilingual childcare San Francisco": {
         "client_id": 0,
         "keyword": "bilingual childcare San Francisco",
-        "platform": "Gemini",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.869727Z",
-        "completed_at": "2026-03-21T20:13:42.614952Z"
-      },
-      "2:buy my house cash": {
-        "client_id": 2,
-        "keyword": "buy my house cash",
-        "platform": "Gemini",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870186Z",
-        "completed_at": "2026-03-21T20:19:04.444563Z"
-      },
-      "1:Bupp Contracting & Remodeling LLC Flat Roof Repair": {
-        "client_id": 1,
-        "keyword": "Bupp Contracting & Remodeling LLC Flat Roof Repair",
-        "platform": "ChatGPT",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870583Z",
-        "completed_at": "2026-03-21T20:23:01.136877Z"
-      }
-    },
-    "device-002": {
-      "1:Bupp Contracting & Remodeling LLC": {
-        "client_id": 1,
-        "keyword": "Bupp Contracting & Remodeling LLC",
-        "platform": "Gemini",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.869899Z",
-        "completed_at": "2026-03-21T20:14:52.284561Z"
-      },
-      "0:infant care San Francisco": {
-        "client_id": 0,
-        "keyword": "infant care San Francisco",
-        "platform": "ChatGPT",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870258Z",
-        "completed_at": "2026-03-21T20:20:47.356977Z"
-      },
-      "2:cash home buyers": {
-        "client_id": 2,
-        "keyword": "cash home buyers",
-        "platform": "Gemini",
-        "status": "started",
-        "timestamp": "2026-03-21T20:08:28.870664Z"
-      }
-    },
-    "device-005": {
-      "2:sell house for cash": {
-        "client_id": 2,
-        "keyword": "sell house for cash",
         "platform": "Perplexity",
         "status": "success",
-        "timestamp": "2026-03-21T20:08:28.869975Z",
-        "completed_at": "2026-03-21T20:12:36.747884Z"
+        "timestamp": "2026-03-22T19:19:54.615754Z",
+        "completed_at": "2026-03-22T19:23:22.315213Z"
       },
       "1:Bupp Contracting & Remodeling LLC Roofing Company Frederick": {
         "client_id": 1,
         "keyword": "Bupp Contracting & Remodeling LLC Roofing Company Frederick",
         "platform": "Perplexity",
         "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870338Z",
-        "completed_at": "2026-03-21T20:16:19.692045Z"
+        "timestamp": "2026-03-22T19:19:54.616428Z",
+        "completed_at": "2026-03-22T19:26:47.001143Z"
       },
-      "0:after school care San Francisco": {
-        "client_id": 0,
-        "keyword": "after school care San Francisco",
-        "platform": "ChatGPT",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870757Z",
-        "completed_at": "2026-03-21T20:19:47.006424Z"
-      }
-    },
-    "device-007": {
-      "0:childcare Alamo Square": {
-        "client_id": 0,
-        "keyword": "childcare Alamo Square",
+      "2:cash for houses": {
+        "client_id": 2,
+        "keyword": "cash for houses",
         "platform": "Perplexity",
         "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870046Z",
-        "completed_at": "2026-03-21T20:11:54.927315Z"
+        "timestamp": "2026-03-22T19:19:54.617176Z",
+        "completed_at": "2026-03-22T19:30:06.647005Z"
+      }
+    },
+    "device-002": {
+      "1:Bupp Contracting & Remodeling LLC": {
+        "client_id": 1,
+        "keyword": "Bupp Contracting & Remodeling LLC",
+        "platform": "ChatGPT",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.615940Z",
+        "completed_at": "2026-03-22T19:23:14.023892Z"
       },
       "2:sell my house fast": {
         "client_id": 2,
         "keyword": "sell my house fast",
         "platform": "Perplexity",
         "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870419Z",
-        "completed_at": "2026-03-21T20:15:35.599542Z"
-      },
-      "1:Bupp Contracting & Remodeling LLC Roof Leak Repair": {
-        "client_id": 1,
-        "keyword": "Bupp Contracting & Remodeling LLC Roof Leak Repair",
-        "platform": "ChatGPT",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870857Z",
-        "completed_at": "2026-03-21T20:19:13.364482Z"
+        "timestamp": "2026-03-22T19:19:54.616504Z",
+        "completed_at": "2026-03-22T19:26:32.639017Z"
       }
     },
-    "device-008": {
+    "device-003": {
+      "2:sell house for cash": {
+        "client_id": 2,
+        "keyword": "sell house for cash",
+        "platform": "Gemini",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.616049Z",
+        "completed_at": "2026-03-22T19:23:17.163067Z"
+      },
+      "0:preschool San Francisco": {
+        "client_id": 0,
+        "keyword": "preschool San Francisco",
+        "platform": "Gemini",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.616617Z",
+        "completed_at": "2026-03-22T19:26:38.774421Z"
+      }
+    },
+    "device-004": {
+      "0:childcare Alamo Square": {
+        "client_id": 0,
+        "keyword": "childcare Alamo Square",
+        "platform": "ChatGPT",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.616134Z",
+        "completed_at": "2026-03-22T19:23:18.596377Z"
+      },
+      "1:Bupp Contracting & Remodeling LLC Flat Roof Repair": {
+        "client_id": 1,
+        "keyword": "Bupp Contracting & Remodeling LLC Flat Roof Repair",
+        "platform": "Gemini",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.616756Z",
+        "completed_at": "2026-03-22T19:26:39.394200Z"
+      }
+    },
+    "device-005": {
       "1:Bupp Contracting & Remodeling LLC Free Roof Estimate": {
         "client_id": 1,
         "keyword": "Bupp Contracting & Remodeling LLC Free Roof Estimate",
         "platform": "Gemini",
         "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870116Z",
-        "completed_at": "2026-03-21T20:12:40.036543Z"
+        "timestamp": "2026-03-22T19:19:54.616208Z",
+        "completed_at": "2026-03-22T19:23:19.414480Z"
       },
-      "0:preschool San Francisco": {
-        "client_id": 0,
-        "keyword": "preschool San Francisco",
-        "platform": "Perplexity",
-        "status": "success",
-        "timestamp": "2026-03-21T20:08:28.870501Z",
-        "completed_at": "2026-03-21T20:17:02.706482Z"
-      },
-      "2:cash for houses": {
+      "2:cash home buyers": {
         "client_id": 2,
-        "keyword": "cash for houses",
+        "keyword": "cash home buyers",
         "platform": "ChatGPT",
         "status": "success",
-        "timestamp": "2026-03-21T20:08:28.871004Z",
-        "completed_at": "2026-03-21T20:20:58.712055Z"
+        "timestamp": "2026-03-22T19:19:54.616869Z",
+        "completed_at": "2026-03-22T19:26:31.160729Z"
+      }
+    },
+    "device-006": {
+      "2:buy my house cash": {
+        "client_id": 2,
+        "keyword": "buy my house cash",
+        "platform": "Perplexity",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.616278Z",
+        "completed_at": "2026-03-22T19:23:11.628942Z"
+      },
+      "0:after school care San Francisco": {
+        "client_id": 0,
+        "keyword": "after school care San Francisco",
+        "platform": "ChatGPT",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.616975Z",
+        "completed_at": "2026-03-22T19:26:36.959624Z"
+      }
+    },
+    "device-007": {
+      "0:infant care San Francisco": {
+        "client_id": 0,
+        "keyword": "infant care San Francisco",
+        "platform": "Gemini",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.616350Z",
+        "completed_at": "2026-03-22T19:23:16.759422Z"
+      },
+      "1:Bupp Contracting & Remodeling LLC Roof Leak Repair": {
+        "client_id": 1,
+        "keyword": "Bupp Contracting & Remodeling LLC Roof Leak Repair",
+        "platform": "Gemini",
+        "status": "success",
+        "timestamp": "2026-03-22T19:19:54.617076Z",
+        "completed_at": "2026-03-22T19:26:33.975148Z"
       }
     }
   }

@@ -18,6 +18,7 @@ from appium import webdriver
 from appium.options.android.uiautomator2.base import UiAutomator2Options
 
 from flows import clear_chrome, run_flow
+from flows_adb import run_flow_adb, clear_chrome as clear_chrome_adb
 
 
 # ── Per-device locks (prevents ADB collisions on the same device) ──────────────
@@ -39,7 +40,7 @@ def _get_lock(device_id: str) -> threading.Lock:
 
 def run_session(serial: str, full_serial: str, port: int,
                 platform: str, prompt: str, follow_up: Optional[str],
-                device_id: str) -> Dict[str, Any]:
+                device_id: str, sess_meta: Optional[Dict] = None) -> Dict[str, Any]:
     """
     Run one AEO session on a specific device.
 
@@ -57,43 +58,63 @@ def run_session(serial: str, full_serial: str, port: int,
     """
     lock   = _get_lock(device_id)
     driver = None
+    use_adb = sess_meta.get("use_adb", False) if isinstance(sess_meta, dict) else False
     lock.acquire()
 
     try:
-        print(f"[{device_id}] Clearing Chrome on {full_serial}...")
-        clear_chrome(full_serial)
-        time.sleep(1)
+        if use_adb:
+            # ── ADB-only mode (for Infinix and other incompatible devices) ──
+            print(f"[{device_id}] ADB-only mode — {platform}")
+            clear_chrome_adb(full_serial)
+            time.sleep(1)
 
-        # Lock portrait BEFORE Appium connects
-        subprocess.run(
-            ["adb", "-s", full_serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0"],
-            capture_output=True, timeout=5,
-        )
-        subprocess.run(
-            ["adb", "-s", full_serial, "shell", "settings", "put", "system", "user_rotation", "0"],
-            capture_output=True, timeout=5,
-        )
+            # Launch Chrome
+            subprocess.run(
+                ["adb", "-s", full_serial, "shell", "am", "start", "-n",
+                 "com.android.chrome/com.google.android.apps.chrome.Main"],
+                capture_output=True, timeout=10,
+            )
+            time.sleep(3)
 
-        options = UiAutomator2Options()
-        options.platform_name       = "Android"
-        options.device_name         = serial
-        options.udid                = full_serial
-        options.automation_name     = "UiAutomator2"
-        options.no_reset            = False
-        options.new_command_timeout = 300
-        options.orientation         = "PORTRAIT"
-        options.app_package         = "com.android.chrome"
-        options.app_activity        = "com.google.android.apps.chrome.Main"
-        options.set_capability("appium:chromeOptions", {"args": []})
-        options.set_capability("appium:chromedriverAutodownload", True)
+            result  = run_flow_adb(platform, full_serial, prompt, follow_up)
 
-        appium_url = f"http://localhost:{port}/wd/hub"
-        print(f"[{device_id}] Connecting to Appium at {appium_url} ({platform})...")
+        else:
+            # ── Appium mode (default) ──
+            print(f"[{device_id}] Clearing Chrome on {full_serial}...")
+            clear_chrome(full_serial)
+            time.sleep(1)
 
-        driver = webdriver.Remote(appium_url, options=options)
-        driver.implicitly_wait(5)
+            # Lock portrait BEFORE Appium connects
+            subprocess.run(
+                ["adb", "-s", full_serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0"],
+                capture_output=True, timeout=5,
+            )
+            subprocess.run(
+                ["adb", "-s", full_serial, "shell", "settings", "put", "system", "user_rotation", "0"],
+                capture_output=True, timeout=5,
+            )
 
-        result  = run_flow(platform, driver, full_serial, prompt, follow_up)
+            options = UiAutomator2Options()
+            options.platform_name       = "Android"
+            options.device_name         = serial
+            options.udid                = full_serial
+            options.automation_name     = "UiAutomator2"
+            options.no_reset            = False
+            options.new_command_timeout = 300
+            options.orientation         = "PORTRAIT"
+            options.app_package         = "com.android.chrome"
+            options.app_activity        = "com.google.android.apps.chrome.Main"
+            options.set_capability("appium:chromeOptions", {"args": []})
+            options.set_capability("appium:chromedriverAutodownload", True)
+
+            appium_url = f"http://localhost:{port}/wd/hub"
+            print(f"[{device_id}] Connecting to Appium at {appium_url} ({platform})...")
+
+            driver = webdriver.Remote(appium_url, options=options)
+            driver.implicitly_wait(5)
+
+            result  = run_flow(platform, driver, full_serial, prompt, follow_up)
+
         success = result.get("status") == "success"
         output  = f"steps={result.get('steps', [])} error={result.get('error', '')}"
 
@@ -143,8 +164,10 @@ def run_parallel(sessions: List[Dict], on_complete: Optional[Callable] = None) -
     threads      = []
 
     def worker(sess):
-        port = sess.get("port")
-        if not port:
+        port    = sess.get("port")
+        use_adb = sess.get("use_adb", False)
+
+        if not port and not use_adb:
             result = {
                 "success":   False,
                 "device_id": sess["device_id"],
@@ -155,11 +178,12 @@ def run_parallel(sessions: List[Dict], on_complete: Optional[Callable] = None) -
             result = run_session(
                 serial      = sess["serial"],
                 full_serial = sess.get("full_serial", sess["serial"]),
-                port        = port,
+                port        = port or 0,
                 platform    = sess["platform"],
                 prompt      = sess["prompt"],
                 follow_up   = sess.get("follow_up"),
                 device_id   = sess["device_id"],
+                sess_meta   = {"use_adb": use_adb},
             )
 
         with results_lock:
