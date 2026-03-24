@@ -459,6 +459,114 @@ def health():
     })
 
 
+# ── POST /audit ───────────────────────────────────────────────────────────────
+
+@app.route("/audit", methods=["POST"])
+def run_audit_endpoint():
+    """
+    Run ranking audit on all connected devices in parallel.
+
+    Body (all optional):
+      {
+        "platform":      "Gemini",       // single platform, or omit for all 3
+        "clients":       3,              // limit to first N clients
+        "exclude":       "Redmi,25078",  // exclude devices by serial substring
+        "keyword_index": 0               // which keyword per client (default: 0)
+      }
+    """
+    from audit import run_audit as audit_run, PLATFORMS as AUDIT_PLATFORMS
+
+    data = request.get_json() or {}
+    platform_filter = data.get("platform")
+    client_limit = data.get("clients")
+    exclude = data.get("exclude", "")
+    keyword_index = int(data.get("keyword_index", 0))
+
+    platforms = [platform_filter] if platform_filter else AUDIT_PLATFORMS
+
+    clients = load_clients()
+    if client_limit:
+        clients = clients[:int(client_limit)]
+
+    # Discover devices
+    result = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=10)
+    devices = []
+    for line in result.stdout.splitlines()[1:]:
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[1] == "device":
+            devices.append(parts[0])
+
+    if exclude:
+        excludes = [e.strip() for e in exclude.split(",")]
+        devices = [d for d in devices if not any(ex in d for ex in excludes)]
+
+    if not devices:
+        return jsonify({"error": "No devices available"}), 503
+
+    # Run in background
+    def run_all_audits():
+        audit_results = []
+        threads = []
+        results_lock = threading.Lock()
+
+        def worker(serial, client, keyword, platform, cdp_port):
+            r = audit_run(client=client, keyword=keyword, platform=platform,
+                          serial=serial, mode="adb", cdp_port=cdp_port)
+            with results_lock:
+                audit_results.append(r)
+
+        for client in clients:
+            keywords = client.get("keywords", [])
+            if not keywords:
+                continue
+            kw_idx = min(keyword_index, len(keywords) - 1)
+            keyword = keywords[kw_idx]
+            for platform in platforms:
+                for idx, serial in enumerate(devices):
+                    t = threading.Thread(
+                        target=worker,
+                        args=(serial, client, keyword, platform, 9222 + idx),
+                        daemon=True,
+                    )
+                    threads.append(t)
+
+        for t in threads:
+            t.start()
+            import time as _t
+            _t.sleep(1)
+        for t in threads:
+            t.join()
+
+        success = sum(1 for r in audit_results if r.get("status") == "success")
+        print(f"\nAUDIT COMPLETE: {success}/{len(audit_results)} passed")
+
+    bg = threading.Thread(target=run_all_audits, daemon=True)
+    bg.start()
+
+    return jsonify({
+        "status": "audit_started",
+        "devices": len(devices),
+        "clients": len(clients),
+        "platforms": platforms,
+    })
+
+
+# ── GET /audit/status ────────────────────────────────────────────────────────
+
+@app.route("/audit/status", methods=["GET"])
+def audit_status():
+    """Return today's audit log entries."""
+    from audit import load_log
+    entries = load_log()
+    today = str(date.today())
+    today_entries = [e for e in entries if e.get("timestamp", "").startswith(today)]
+    return jsonify({
+        "total_all_time": len(entries),
+        "today": len(today_entries),
+        "entries": today_entries,
+    })
+
+
 # ── POST /reset ───────────────────────────────────────────────────────────────
 
 @app.route("/reset", methods=["POST"])
@@ -505,12 +613,14 @@ if __name__ == "__main__":
     for device_id, info in DEVICE_POOL.items():
         print(f"  {device_id}  serial:{info['serial'][:24]}  port:{info.get('port')}")
     print()
-    print(f"POST /run-aeo    — single session (OpenClaw sends prompt)")
-    print(f"POST /run-all    — batch sessions")
-    print(f"GET  /status     — today's rotation")
-    print(f"GET  /clients    — client keyword status")
-    print(f"GET  /health     — device + Appium status")
-    print(f"POST /reset      — reset rotation")
-    print(f"GET  /logs/today — today's logs")
+    print(f"POST /run-aeo      — single session (OpenClaw sends prompt)")
+    print(f"POST /run-all      — batch sessions")
+    print(f"POST /audit        — ranking audit (all devices, parallel)")
+    print(f"GET  /audit/status — today's audit results")
+    print(f"GET  /status       — today's rotation")
+    print(f"GET  /clients      — client keyword status")
+    print(f"GET  /health       — device + Appium status")
+    print(f"POST /reset        — reset rotation")
+    print(f"GET  /logs/today   — today's logs")
     print("=" * 60)
     app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)

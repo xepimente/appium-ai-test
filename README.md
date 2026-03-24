@@ -2,6 +2,8 @@
 
 Hybrid mobile automation for AEO (Answer Engine Optimization) sessions across multiple Android devices. Uses **Appium + WebView context switching** for compatible devices and **ADB-only automation** for budget phones (Infinix, TECNO). OpenClaw generates prompts, this server distributes and executes them on devices in TRUE parallel.
 
+Includes a **Ranking Audit system** that queries AI platforms with ranking prompts, captures screenshots of the response, and saves results locally (ready for S3 upload).
+
 ---
 
 ## Tested & Working Devices
@@ -38,11 +40,14 @@ Hybrid mobile automation for AEO (Answer Engine Optimization) sessions across mu
 aeo-appium/
 ├── main.py               # CLI orchestration (--test, --dry-run, --clients, --exclude)
 ├── server.py             # Flask API (port 5001) — OpenClaw sends prompts here
+├── audit.py              # Ranking audit system — screenshot + text capture
+├── screenshot.py         # CDP scroll + ADB screencap module
 ├── flows.py              # Appium flows: Gemini, ChatGPT, Perplexity (WebView context)
 ├── flows_adb.py          # ADB-only flows: same platforms, no Appium needed
 ├── session_runner.py     # Hybrid parallel runner — auto-picks Appium or ADB per device
 ├── test_flows.py         # Test Appium flows on single device (no LLM)
 ├── test_adb_flows.py     # Test ADB flows on single device (no LLM)
+├── test_audit_gemini.py  # Test audit flow on Gemini (ADB or Appium)
 ├── agents/
 │   ├── prompt_generator.py   # DeepSeek prompt generation (fallback)
 │   └── ranking_auditor.py    # Weekly audit prompt generation
@@ -54,6 +59,12 @@ aeo-appium/
 ├── active_devices.json   # Auto-generated: devices with port + mode (use_adb flag)
 ├── device_rotation.json  # Auto-generated: tracks daily keyword completion
 ├── sessions_log.json     # Auto-generated: full session history
+├── audit_results/        # Auto-generated: audit screenshots + text + logs
+│   ├── Gemini/           #   Screenshots per platform
+│   ├── ChatGPT/
+│   ├── Perplexity/
+│   ├── text/             #   Response text files
+│   └── audit_log.json    #   Audit run history
 └── requirements.txt
 ```
 
@@ -61,7 +72,27 @@ aeo-appium/
 
 ## How It Works
 
-### Hybrid Automation
+### Two Systems: Seeding & Audit
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ SYSTEM 1: Daily Seeding Sessions                        │
+│ Purpose: Build AI visibility (prompt + follow-up)       │
+│ Script:  main.py / server.py (POST /run-all)            │
+│ Mode:    Hybrid (Appium or ADB per device)              │
+│ Output:  Session log (pass/fail)                        │
+│ Freq:    Daily                                          │
+├─────────────────────────────────────────────────────────┤
+│ SYSTEM 2: Ranking Audit                                 │
+│ Purpose: Check ranking position (screenshot + text)     │
+│ Script:  audit.py / server.py (POST /audit)             │
+│ Mode:    ADB-only (all devices, no Appium needed)       │
+│ Output:  Screenshot + response text per platform        │
+│ Freq:    Weekly                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Hybrid Automation (Seeding)
 
 The system auto-detects each device's brand and picks the right automation backend:
 
@@ -70,23 +101,45 @@ The system auto-detects each device's brand and picks the right automation backe
 | Realme, Vivo, Samsung, Nubia | **Appium** | WebView context switching, CSS selectors, JS execution |
 | Infinix, TECNO | **ADB-only** | `adb shell input tap/text`, `uiautomator dump`, coordinate-based |
 
-This is transparent — same rotation logic, same parallel threading, same session logging. The device just runs a different automation engine.
+### Ranking Audit
 
-### Two Systems
+The audit system queries AI platforms with a ranking prompt, then captures the response:
+
+1. Sends concise ranking prompt: "Top 3 businesses for {keyword} in {city}, {state}..."
+2. Waits for AI to finish generating
+3. Uses **CDP** (Chrome DevTools Protocol) to scroll the response to the top of the viewport
+4. Takes a single **ADB screenshot** — captures only the AI response (no user prompt)
+5. Extracts response text via CDP JavaScript
+6. Saves screenshot + text + metadata locally
+
+```
+audit_results/
+├── Gemini/
+│   └── 0_bilingual-childcare_20260325_083000.png
+├── ChatGPT/
+│   └── 0_bilingual-childcare_20260325_083100.png
+├── Perplexity/
+│   └── 0_bilingual-childcare_20260325_083200.png
+├── text/
+│   └── 0_bilingual-childcare_20260325_083000_Gemini.txt
+└── audit_log.json
+```
+
+File naming: `{client_id}_{keyword-slug}_{timestamp}.png`
+
+### OpenClaw Integration
 
 ```
 OpenClaw (cloud/other machine)          This Mac Mini (runner)
 ─────────────────────────────           ─────────────────────────
 1. GET /clients                    →    Returns client data + keyword status
 2. Generates prompts (LLM)
-3. POST /run-all {sessions}        →    Distributes to devices
-                                        Auto-picks Appium or ADB per device
-                                        Runs in TRUE parallel
-                                        Logs results
-4. Check /status, /logs/today      →    Returns progress
+3. POST /run-all {sessions}        →    Distributes to devices (seeding)
+   POST /audit {platform, ...}     →    Runs ranking audit (all devices)
+4. Check /status, /audit/status    →    Returns progress
 ```
 
-### Rotation Rules
+### Rotation Rules (Seeding)
 
 ```
 1 device + 1 client = 1 keyword per day
@@ -96,15 +149,6 @@ OpenClaw (cloud/other machine)          This Mac Mini (runner)
 - Each device serves multiple clients (1 keyword each, sequential)
 - Each keyword runs on exactly 1 device per day (no duplicates)
 - All devices run simultaneously (TRUE parallel)
-
-Example with 7 devices, 3 clients (5 keywords each):
-```
-Devices 1-3: C1-KW1, C2-KW1, C3-KW1  (1 session each)
-Devices 4-6: C1-KW2, C2-KW2, C3-KW2  (1 session each)
-Device  7:   C1-KW3                    (1 session)
-= 7 keywords done in round 1, then devices continue with remaining keywords
-= all 15 keywords done in 1 run
-```
 
 ### Generation Wait
 
@@ -117,6 +161,11 @@ Every session clears Chrome (`pm clear`), which triggers FRE dialogs. Both Appiu
 2. "No thanks" (notifications)
 3. "Got it" (Enhanced ad privacy)
 4. "Accept & continue" / "OK" / "Continue"
+
+Audit flows also handle:
+5. Microphone permission ("Never allow" / "Block")
+6. Gemini app banner (ADB coordinate tap)
+7. Perplexity Comet modal (coordinate tap)
 
 All devices are locked to portrait orientation via ADB before each session.
 
@@ -234,7 +283,26 @@ python3 test_flows.py --platform ChatGPT
 python3 test_flows.py --platform Perplexity
 ```
 
-### Multi-device test with hardcoded prompts
+### Test Ranking Audit
+
+```bash
+# Single device, single platform
+python3 audit.py --test --platform Gemini
+
+# Single device, all 3 platforms
+python3 audit.py --test
+
+# All devices in parallel, single platform
+python3 audit.py --test --platform Gemini --all-devices --exclude Redmi
+
+# All devices, all platforms
+python3 audit.py --test --all-devices --exclude Redmi
+
+# Specific device
+python3 audit.py --test --platform Gemini --serial <serial>
+```
+
+### Multi-device seeding test
 
 ```bash
 python3 main.py --dry-run --test --clients 3      # preview plan
@@ -254,6 +322,8 @@ python3 main.py                                    # all 13 clients
 
 ## CLI Flags
 
+### Seeding (main.py)
+
 ```
 python3 main.py                                    # full run (all clients, DeepSeek)
 python3 main.py --test                             # hardcoded prompts (no LLM)
@@ -266,9 +336,22 @@ python3 main.py --reset                            # reset today's rotation
 python3 main.py --audit                            # weekly ranking audit
 ```
 
+### Ranking Audit (audit.py)
+
+```
+python3 audit.py --test                            # test client, all platforms, 1 device
+python3 audit.py --test --platform Gemini          # test client, Gemini only
+python3 audit.py --test --all-devices              # test client, all devices parallel
+python3 audit.py --all-devices --exclude Redmi     # all clients, exclude Redmi
+python3 audit.py --clients 3 --platform ChatGPT   # first 3 clients, ChatGPT only
+python3 audit.py --all-devices --exclude Redmi     # production run
+```
+
 ---
 
 ## API Endpoints (server.py — port 5001)
+
+### Seeding
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -281,51 +364,94 @@ python3 main.py --audit                            # weekly ranking audit
 | GET | /logs/today | Today's session logs |
 | GET | /logs | All logs (optional `?date=YYYY-MM-DD`) |
 
+### Ranking Audit
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /audit | Trigger ranking audit on all devices (parallel, background) |
+| GET | /audit/status | Today's audit results from `audit_log.json` |
+
+**POST /audit body (all optional):**
+```json
+{
+  "platform": "Gemini",
+  "clients": 3,
+  "exclude": "Redmi,25078",
+  "keyword_index": 0
+}
+```
+
+**Example:**
+```bash
+# Trigger audit via API
+curl -X POST http://localhost:5001/audit \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "Gemini", "exclude": "Redmi"}'
+
+# Check results
+curl http://localhost:5001/audit/status
+```
+
 ---
 
 ## Platform Flows
 
 ### Gemini (gemini.google.com)
 
-**Appium mode:**
+**Appium mode (seeding):**
 1. [NATIVE] Clear Chrome + lock portrait → dismiss FRE → navigate via address bar
 2. [WEBVIEW] Find input (`div[contenteditable]`) → type via `execCommand('insertText')` → click Send
 3. [WEBVIEW] Wait for generation (poll stop button)
 4. [ADB] Scroll (left edge, x=15, avoids maps)
 5. [WEBVIEW] Follow-up: same flow
 
-**ADB mode:**
+**ADB mode (seeding):**
 1. Clear Chrome → launch → dismiss FRE via `uiautomator dump` + tap
 2. Navigate via address bar → type URL → Enter
 3. Tap input area → type word by word via `adb input text` + `keyevent 62` (space)
 4. Find Send via `uiautomator dump` (content-desc="Send message") → tap
 5. Wait for generation → scroll → follow-up same flow
 
+**Audit mode:**
+1. Clear Chrome → launch directly to gemini.google.com → dismiss FRE + mic permission + app banner
+2. Type audit prompt → Send → wait for generation
+3. CDP `scrollIntoView` positions response at top → ADB screencap
+
 ### ChatGPT (chatgpt.com)
 
-**Appium mode:**
+**Appium mode (seeding):**
 1. [NATIVE] Clear Chrome → dismiss FRE → navigate
 2. [WEBVIEW] Find `#prompt-textarea` → type via React-aware JS setter → click `#composer-submit-button`
 3. Wait → scroll → follow-up
 
-**ADB mode:**
+**ADB mode (seeding):**
 1. Clear Chrome → FRE → navigate
 2. Find `prompt-textarea` via `uiautomator dump` → type → find `composer-submit-button` → tap
 3. Wait → scroll → follow-up
 
+**Audit mode:**
+1. Clear Chrome → launch to chatgpt.com → dismiss FRE
+2. Type audit prompt → Send → wait for generation
+3. CDP `scrollIntoView` → ADB screencap
+
 ### Perplexity (www.perplexity.ai)
 
-**Appium mode:**
+**Appium mode (seeding):**
 1. [NATIVE] Clear Chrome → FRE → navigate → dismiss Comet modals (native)
 2. [WEBVIEW] Dismiss remaining modals via JS → find `#ask-input` → type via `execCommand` → JS click Submit
 3. Wait → scroll → follow-up
 
-**ADB mode:**
+**ADB mode (seeding):**
 1. Clear Chrome → FRE → navigate
 2. Dismiss Comet modals by tapping X at confirmed coordinates `(w*0.943, h*0.134)`
 3. Find `ask-input` via `uiautomator dump` → type
 4. Hide keyboard (tap content area) → poll until Submit button at `y > 1400` → tap
 5. Wait → scroll → follow-up
+
+**Audit mode:**
+1. Clear Chrome → launch to perplexity.ai → dismiss FRE + Comet modals
+2. Type audit prompt → keyboard hide + submit poll → wait for generation
+3. CDP `scrollIntoView` on `.prose` / `ol` element → ADB screencap
 
 ---
 
@@ -341,11 +467,17 @@ python3 main.py --audit                            # weekly ranking audit
 RUNNER_HOST=https://your-tunnel-url.trycloudflare.com
 ```
 
-### Flow
+### Seeding Flow
 1. OpenClaw calls `GET {RUNNER_HOST}/clients` → gets client data + remaining keywords
 2. Generates prompts for each remaining keyword
 3. Sends `POST {RUNNER_HOST}/run-all` with all sessions
 4. Server distributes, runs in parallel, logs results
+
+### Audit Flow
+1. OpenClaw (or scheduler) calls `POST {RUNNER_HOST}/audit` with optional filters
+2. Server discovers devices, runs audit in background on all devices
+3. Screenshots + text saved to `audit_results/`
+4. Check results: `GET {RUNNER_HOST}/audit/status`
 
 ---
 
@@ -370,6 +502,11 @@ RUNNER_HOST=https://your-tunnel-url.trycloudflare.com
 | Chromedriver | Auto-downloaded via `chromedriverAutodownload` capability |
 | Appium flag | `--allow-insecure uiautomator2:chromedriver_autodownload` |
 | Remote access | Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:5001`) |
+| Audit screenshot | CDP `scrollIntoView` + ADB `screencap` (single image) |
+| Audit CDP | `adb forward` + WebSocket to Chrome DevTools, unique port per device |
+| Audit text extract | CDP `Runtime.evaluate` with per-platform JS selectors |
+| Audit parallel | Unique CDP ports (9222 + device index) prevent `adb forward` collision |
+| Audit logging | `audit_log.json` — timestamp, client, keyword, platform, status, paths |
 
 ---
 
@@ -421,34 +558,54 @@ rm active_devices.json && bash start_appium.sh && python3 setup_devices.py --ass
 python3 main.py --reset
 ```
 
+### Audit CDP connection failed
+Each device needs a unique CDP port in parallel mode. The `--all-devices` flag handles this automatically (9222 + device index). If running manually, pass different `--cdp-port` values.
+
+### Audit screenshot shows home screen
+The screenshot was taken after Chrome closed. Make sure `take_screenshot` runs before `driver.quit()` (Appium mode) or while Chrome is still open (ADB mode).
+
+### Gemini microphone permission popup (Samsung)
+Handled automatically by `_dismiss_gemini_popups()` — taps "Never allow" / "Block". If still appearing, check the device screen and tap manually.
+
+### Gemini response in table format
+The audit prompt includes "Use a numbered list format, not a table" to prevent this. If Gemini still uses tables, the prompt may need further tweaking for that specific keyword.
+
 ---
 
 ## Quick Reference
 
 ```bash
-# Daily startup
+# ── Daily Startup ──
 bash start_appium.sh                    # Terminal 1: Appium servers
 python3 setup_devices.py --assign       # Assign devices (auto-detects mode)
 python3 server.py                       # Terminal 2: API server
 cloudflared tunnel --url http://localhost:5001  # Terminal 3: tunnel
 
-# Testing
+# ── Seeding Tests ──
 python3 test_adb_flows.py --platform Gemini     # ADB test (Infinix)
 python3 test_flows.py --platform Gemini          # Appium test (others)
 python3 main.py --test --clients 3               # multi-device test
 python3 main.py --dry-run --clients 3            # preview plan
 
-# Operations
-python3 main.py --status                         # today's status
+# ── Ranking Audit ──
+python3 audit.py --test --platform Gemini                    # single device
+python3 audit.py --test --all-devices --exclude Redmi        # all devices parallel
+python3 audit.py --all-devices --exclude Redmi               # production audit
+curl -X POST localhost:5001/audit -H "Content-Type: application/json" -d '{"exclude":"Redmi"}'
+curl localhost:5001/audit/status                             # check results
+
+# ── Operations ──
+python3 main.py --status                         # today's seeding status
 python3 main.py --reset                          # reset rotation
 curl http://localhost:5001/health                # API health
 curl http://localhost:5001/clients               # client status
+curl http://localhost:5001/audit/status          # audit results
 
-# Adding devices — just plug in and:
+# ── Adding Devices ──
 bash start_appium.sh
 python3 setup_devices.py --assign
 # restart server.py
 
-# Debug tap positions
+# ── Debug ──
 adb -s <serial> shell settings put system pointer_location 1
 ```
