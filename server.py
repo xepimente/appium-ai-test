@@ -480,9 +480,6 @@ def run_audit_endpoint():
     platform_filter = data.get("platform")
     client_limit = data.get("clients")
     exclude = data.get("exclude", "")
-    keyword_index = int(data.get("keyword_index", 0))
-
-    platforms = [platform_filter] if platform_filter else AUDIT_PLATFORMS
 
     clients = load_clients()
     if client_limit:
@@ -503,37 +500,48 @@ def run_audit_endpoint():
     if not devices:
         return jsonify({"error": "No devices available"}), 503
 
+    # Build jobs: all keywords, 1 random platform each
+    jobs = []
+    for client in clients:
+        for keyword in client.get("keywords", []):
+            platform = platform_filter if platform_filter else random.choice(AUDIT_PLATFORMS)
+            jobs.append({"client": client, "keyword": keyword, "platform": platform})
+
+    # Distribute round-robin across devices
+    device_queues = {i: [] for i in range(len(devices))}
+    for idx, job in enumerate(jobs):
+        device_queues[idx % len(devices)].append(job)
+
+    total_jobs = len(jobs)
+
     # Run in background
     def run_all_audits():
         audit_results = []
-        threads = []
         results_lock = threading.Lock()
+        threads = []
 
-        def worker(serial, client, keyword, platform, cdp_port):
-            r = audit_run(client=client, keyword=keyword, platform=platform,
-                          serial=serial, mode="adb", cdp_port=cdp_port)
-            with results_lock:
-                audit_results.append(r)
+        def device_worker(dev_idx, serial, queue, cdp_port):
+            for job in queue:
+                r = audit_run(client=job["client"], keyword=job["keyword"],
+                              platform=job["platform"], serial=serial,
+                              mode="adb", cdp_port=cdp_port)
+                with results_lock:
+                    audit_results.append(r)
 
-        for client in clients:
-            keywords = client.get("keywords", [])
-            if not keywords:
+        for dev_idx, queue in device_queues.items():
+            if not queue:
                 continue
-            kw_idx = min(keyword_index, len(keywords) - 1)
-            keyword = keywords[kw_idx]
-            for platform in platforms:
-                for idx, serial in enumerate(devices):
-                    t = threading.Thread(
-                        target=worker,
-                        args=(serial, client, keyword, platform, 9222 + idx),
-                        daemon=True,
-                    )
-                    threads.append(t)
+            t = threading.Thread(
+                target=device_worker,
+                args=(dev_idx, devices[dev_idx], queue, 9222 + dev_idx),
+                daemon=True,
+            )
+            threads.append(t)
 
         for t in threads:
             t.start()
             import time as _t
-            _t.sleep(1)
+            _t.sleep(2)
         for t in threads:
             t.join()
 
@@ -547,7 +555,10 @@ def run_audit_endpoint():
         "status": "audit_started",
         "devices": len(devices),
         "clients": len(clients),
-        "platforms": platforms,
+        "total_keywords": total_jobs,
+        "distribution": {
+            f"device_{i}": len(q) for i, q in device_queues.items() if q
+        },
     })
 
 

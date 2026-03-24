@@ -609,6 +609,7 @@ def main():
     # ── All-devices parallel mode ──
     if args.all_devices:
         import threading
+        import random
 
         # Discover devices
         result = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=10)
@@ -627,7 +628,7 @@ def main():
             print("No devices found.")
             return
 
-        # Get brand info for display
+        # Get brand info
         device_info = []
         for serial in devices:
             brand = subprocess.run(
@@ -640,53 +641,74 @@ def main():
             ).stdout.strip()
             device_info.append({"serial": serial, "brand": brand, "model": model})
 
-        print(f"\nAEO Ranking Audit — ALL DEVICES (parallel)")
+        # Build all keyword jobs: (client, keyword, random_platform)
+        jobs = []
+        for client in clients:
+            keywords = client.get("keywords", [])
+            for keyword in keywords:
+                platform = args.platform if args.platform else random.choice(PLATFORMS)
+                jobs.append({"client": client, "keyword": keyword, "platform": platform})
+
+        # Distribute jobs round-robin across devices
+        # Each device gets a queue of jobs to run sequentially
+        device_queues = {i: [] for i in range(len(device_info))}
+        for idx, job in enumerate(jobs):
+            device_idx = idx % len(device_info)
+            device_queues[device_idx].append(job)
+
+        # Print plan
+        print(f"\nAEO Ranking Audit — ALL DEVICES")
+        print(f"{'='*60}")
         print(f"Devices: {len(device_info)}")
         for d in device_info:
             print(f"  {d['brand']} {d['model']} ({d['serial'][:30]}...)")
-        print(f"Platforms: {', '.join(platforms)}")
         print(f"Clients: {len(clients)}")
+        print(f"Total keywords: {len(jobs)}")
+        print(f"\nDistribution:")
+        for dev_idx, queue in device_queues.items():
+            d = device_info[dev_idx]
+            print(f"  {d['brand']} {d['model']}: {len(queue)} keywords")
+            for j in queue[:3]:
+                print(f"    {j['client']['biz_name']} | {j['keyword'][:30]} | {j['platform']}")
+            if len(queue) > 3:
+                print(f"    ... and {len(queue) - 3} more")
+        print(f"{'='*60}")
 
         all_results = []
         results_lock = threading.Lock()
 
-        def worker(serial, brand, model, client, keyword, platform, cdp_port):
-            print(f"\n[{brand} {model}] Starting {platform} audit (CDP port {cdp_port})...")
-            r = run_audit(
-                client=client,
-                keyword=keyword,
-                platform=platform,
-                serial=serial,
-                mode="adb",
-                cdp_port=cdp_port,
-            )
-            with results_lock:
-                all_results.append(r)
+        def device_worker(dev_idx, dev, queue, cdp_port):
+            """Run all assigned jobs sequentially on one device."""
+            for job in queue:
+                print(f"\n[{dev['brand']} {dev['model']}] {job['platform']} — "
+                      f"{job['client']['biz_name']} | {job['keyword'][:30]}")
+                r = run_audit(
+                    client=job["client"],
+                    keyword=job["keyword"],
+                    platform=job["platform"],
+                    serial=dev["serial"],
+                    mode="adb",
+                    cdp_port=cdp_port,
+                )
+                with results_lock:
+                    all_results.append(r)
 
+        # Start one thread per device — each runs its queue sequentially
         threads = []
-        for client in clients:
-            keywords = client.get("keywords", [])
-            if not keywords:
+        for dev_idx, queue in device_queues.items():
+            if not queue:
                 continue
-            kw_idx = min(args.keyword_index, len(keywords) - 1)
-            keyword = keywords[kw_idx]
+            cdp_port = 9222 + dev_idx
+            t = threading.Thread(
+                target=device_worker,
+                args=(dev_idx, device_info[dev_idx], queue, cdp_port),
+                daemon=True,
+            )
+            threads.append(t)
 
-            for platform in platforms:
-                for idx, d in enumerate(device_info):
-                    # Each device gets its own CDP port to avoid collision
-                    cdp_port = 9222 + idx
-                    t = threading.Thread(
-                        target=worker,
-                        args=(d["serial"], d["brand"], d["model"],
-                              client, keyword, platform, cdp_port),
-                        daemon=True,
-                    )
-                    threads.append(t)
-
-        # Start all threads
         for t in threads:
             t.start()
-            time.sleep(1)  # stagger slightly to avoid ADB collisions
+            time.sleep(2)  # stagger to avoid ADB collisions at start
 
         for t in threads:
             t.join()
@@ -694,7 +716,8 @@ def main():
         success = sum(1 for r in all_results if r["status"] == "success")
         failed = sum(1 for r in all_results if r["status"] == "error")
         print(f"\n{'='*60}")
-        print(f"AUDIT COMPLETE: {success} passed, {failed} failed ({len(device_info)} devices)")
+        print(f"AUDIT COMPLETE: {success} passed, {failed} failed")
+        print(f"Devices: {len(device_info)} | Keywords: {len(jobs)}")
         print(f"Results in: {OUTPUT_DIR}/")
         print(f"{'='*60}")
         return
