@@ -59,6 +59,7 @@ def run_session(serial: str, full_serial: str, port: int,
     lock   = _get_lock(device_id)
     driver = None
     use_adb = sess_meta.get("use_adb", False) if isinstance(sess_meta, dict) else False
+    backlinks = sess_meta.get("backlinks", []) if isinstance(sess_meta, dict) else []
     lock.acquire()
 
     try:
@@ -76,7 +77,7 @@ def run_session(serial: str, full_serial: str, port: int,
             )
             time.sleep(3)
 
-            result  = run_flow_adb(platform, full_serial, prompt, follow_up)
+            result  = run_flow_adb(platform, full_serial, prompt, follow_up, backlinks=backlinks)
 
         else:
             # ── Appium mode (default) ──
@@ -113,7 +114,7 @@ def run_session(serial: str, full_serial: str, port: int,
             driver = webdriver.Remote(appium_url, options=options)
             driver.implicitly_wait(5)
 
-            result  = run_flow(platform, driver, full_serial, prompt, follow_up)
+            result  = run_flow(platform, driver, full_serial, prompt, follow_up, backlinks=backlinks)
 
         success = result.get("status") == "success"
         output  = f"steps={result.get('steps', [])} error={result.get('error', '')}"
@@ -183,7 +184,7 @@ def run_parallel(sessions: List[Dict], on_complete: Optional[Callable] = None) -
                 prompt      = sess["prompt"],
                 follow_up   = sess.get("follow_up"),
                 device_id   = sess["device_id"],
-                sess_meta   = {"use_adb": use_adb},
+                sess_meta   = {"use_adb": use_adb, "backlinks": sess.get("backlinks", [])},
             )
 
         with results_lock:

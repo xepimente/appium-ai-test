@@ -10,6 +10,7 @@ Uses:
   - adb shell am start (for launching apps)
 """
 
+import json
 import re
 import subprocess
 import time
@@ -170,15 +171,34 @@ def type_text(serial, text):
 
 def hide_keyboard_and_submit(serial):
     """Hide keyboard, wait until Submit is at correct position, then tap it."""
+    w, h = get_screen_size(serial)
+
+    # First check if Submit/arrow is already visible without keyboard
+    result = find_element(serial, text="Submit") or find_element(serial, content_desc="Submit")
+    if result:
+        cx, cy, _, _ = result
+        # If Submit is in the top half, keyboard is not showing — tap directly
+        if cy < h * 0.5:
+            print(f"    Submit visible at ({cx},{cy}) — tapping directly")
+            tap(serial, cx, cy)
+            time.sleep(1)
+            return
+
     print("  Hiding keyboard...")
     hide_keyboard(serial)
     print("  Waiting for Submit to be ready...")
     for attempt in range(15):
-        result = find_element(serial, text="Submit")
+        result = find_element(serial, text="Submit") or find_element(serial, content_desc="Submit")
         if result:
             cx, cy, _, _ = result
             if cy > 1400:
                 print(f"    Submit ready at ({cx},{cy}) — tapping")
+                tap(serial, cx, cy)
+                time.sleep(1)
+                return
+            elif cy < h * 0.5:
+                # No keyboard layout — submit is inline with input
+                print(f"    Submit inline at ({cx},{cy}) — tapping")
                 tap(serial, cx, cy)
                 time.sleep(1)
                 return
@@ -233,9 +253,255 @@ def wait_for_generation(serial, max_wait=GENERATION_TIMEOUT):
         time.sleep(GENERATION_POLL)
 
 
+# ── Backlink Click (Type 3) ────────────────────────────────────────────────────
+
+def click_backlink_adb(serial, backlinks, cdp_port=9222):
+    """
+    Find and click a matching backlink in the AI response sources.
+
+    Strategy: CDP first (can scan entire page DOM including off-screen content),
+    then fall back to UI dump if CDP fails.
+
+    After clicking, stays on the backlink page for ~5 seconds with scrolling.
+
+    Args:
+        serial: ADB device serial
+        backlinks: list of backlink URLs to look for
+        cdp_port: CDP port for this device
+
+    Returns:
+        The matched URL string, or None if no match found.
+    """
+    if not backlinks:
+        return None
+
+    import random
+    from screenshot import cdp_connect, cdp_disconnect, cdp_eval
+
+    target = random.choice(backlinks)
+    # Extract domain for matching (e.g., "maeschildcare.com")
+    domain = target.split("//")[-1].split("/")[0].replace("www.", "")
+    w, h = get_screen_size(serial)
+    print(f"  Looking for backlink matching: {domain}")
+
+    backlinks_js = json.dumps(backlinks)
+
+    # ── Step 1: CDP scan entire page for matching links (no sources button needed) ──
+    print("    Scanning entire page DOM for backlink via CDP...")
+    ws = cdp_connect(serial, cdp_port)
+    if ws:
+        try:
+            matched = cdp_eval(ws, f"""
+                (() => {{
+                    let backlinks = {backlinks_js};
+                    let domain = "{domain}";
+                    let links = document.querySelectorAll('a[href]');
+
+                    // Pass 1: exact path match
+                    for (let link of links) {{
+                        let href = link.href || '';
+                        if (!href.includes(domain)) continue;
+                        for (let bl of backlinks) {{
+                            try {{
+                                let blPath = new URL(bl).pathname;
+                                let linkPath = new URL(href).pathname;
+                                if (blPath.length > 1 && linkPath === blPath) {{
+                                    window.location.href = href;
+                                    return {{url: href, match: 'exact_path'}};
+                                }}
+                            }} catch(e) {{}}
+                        }}
+                    }}
+
+                    // Pass 2: path segment match
+                    for (let link of links) {{
+                        let href = link.href || '';
+                        if (!href.includes(domain)) continue;
+                        for (let bl of backlinks) {{
+                            let parts = bl.split('/').filter(s => s);
+                            let lastPart = parts[parts.length - 1] || '';
+                            if (lastPart && lastPart.length > 3 && href.includes(lastPart)) {{
+                                window.location.href = href;
+                                return {{url: href, match: 'path_segment'}};
+                            }}
+                        }}
+                    }}
+
+                    // Pass 3: any link with matching domain
+                    for (let link of links) {{
+                        let href = link.href || '';
+                        if (href.includes(domain)) {{
+                            window.location.href = href;
+                            return {{url: href, match: 'domain'}};
+                        }}
+                    }}
+
+                    return null;
+                }})()
+            """)
+        finally:
+            cdp_disconnect(serial, ws, cdp_port)
+
+        if matched:
+            print(f"    Backlink found in page ({matched.get('match')}): {matched.get('url', '')[:60]}")
+            print(f"  Waiting for backlink page to load...")
+            time.sleep(8)
+            print(f"  Browsing backlink page for ~5 seconds...")
+            for _ in range(2):
+                swipe(serial, 15, int(h * 0.7), 15, int(h * 0.4), 500)
+                time.sleep(1.5)
+            time.sleep(2)
+            return matched.get("url", domain)
+        print("    No backlink in page DOM — trying Sources panel...")
+
+    # ── Step 2: Open Sources panel, then search again ──
+    # Sources button may reveal hidden links (Gemini drawer, Perplexity citations)
+    print("  Looking for Sources button...")
+    sources_found = False
+    for attempt in range(4):
+        xml = dump_ui(serial)
+        for node in re.finditer(
+            r'text="([^"]*)"[^>]*resource-id="([^"]*)"[^>]*'
+            r'content-desc="([^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',
+            xml
+        ):
+            t, rid, desc, x1, y1, x2, y2 = node.groups()
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            combined = f"{t} {desc}".lower()
+            is_sources = "sources" in combined or "source" in combined
+            # Perplexity: small numbered element (citation count) in lower screen
+            is_citation_count = (t.strip().isdigit() and int(t.strip()) > 0
+                                 and (x2 - x1) < 100 and y1 > h * 0.4)
+            if is_sources or is_citation_count:
+                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+                if cy > h * 0.3:
+                    print(f"    Found Sources '{t}' at ({cx},{cy}) — tapping")
+                    tap(serial, cx, cy)
+                    sources_found = True
+                    time.sleep(3)
+                    break
+        if sources_found:
+            break
+        if attempt < 3:
+            swipe(serial, 15, int(h * 0.6), 15, int(h * 0.3), 500)
+            time.sleep(1)
+
+    if not sources_found:
+        # Try CDP to open sources
+        ws_src = cdp_connect(serial, cdp_port)
+        if ws_src:
+            try:
+                cdp_eval(ws_src, r"""
+                    (() => {
+                        let els = document.querySelectorAll('a, button, [role=button], span');
+                        for (let el of els) {
+                            let text = el.textContent.trim();
+                            if (/^\d+$/.test(text) && parseInt(text) > 3 && parseInt(text) < 50) {
+                                let rect = el.getBoundingClientRect();
+                                if (rect.width < 60 && rect.width > 10 && rect.y > 300) {
+                                    el.click();
+                                    return 'clicked_citation';
+                                }
+                            }
+                        }
+                        let btns = document.querySelectorAll('button, [role=button], a');
+                        for (let btn of btns) {
+                            if (btn.textContent && btn.textContent.trim().toLowerCase().includes('source')) {
+                                btn.click();
+                                return 'clicked_sources';
+                            }
+                        }
+                        return false;
+                    })()
+                """)
+                sources_found = True
+            finally:
+                cdp_disconnect(serial, ws_src, cdp_port)
+
+    if not sources_found:
+        print("    Sources button not found — no backlink to click")
+        return None
+
+    # Wait for sources panel to fully render
+    time.sleep(4)
+
+    # ── Step 3: Search sources panel for matching backlink via CDP ──
+    ws2 = cdp_connect(serial, cdp_port)
+    if not ws2:
+        print(f"    CDP reconnect failed")
+        return None
+
+    try:
+        print("    Searching sources panel for matching backlink...")
+        matched = cdp_eval(ws2, f"""
+            (() => {{
+                let backlinks = {backlinks_js};
+                let domain = "{domain}";
+                let links = document.querySelectorAll('a[href]');
+
+                // Pass 1: exact path match
+                for (let link of links) {{
+                    let href = link.href || '';
+                    if (!href.includes(domain)) continue;
+                    for (let bl of backlinks) {{
+                        try {{
+                            let blPath = new URL(bl).pathname;
+                            let linkPath = new URL(href).pathname;
+                            if (blPath.length > 1 && linkPath === blPath) {{
+                                window.location.href = href;
+                                return {{url: href, match: 'exact_path'}};
+                            }}
+                        }} catch(e) {{}}
+                    }}
+                }}
+
+                // Pass 2: path segment match
+                for (let link of links) {{
+                    let href = link.href || '';
+                    if (!href.includes(domain)) continue;
+                    for (let bl of backlinks) {{
+                        let parts = bl.split('/').filter(s => s);
+                        let lastPart = parts[parts.length - 1] || '';
+                        if (lastPart && lastPart.length > 3 && href.includes(lastPart)) {{
+                            window.location.href = href;
+                            return {{url: href, match: 'path_segment'}};
+                        }}
+                    }}
+                }}
+
+                // Pass 3: any link with matching domain
+                for (let link of links) {{
+                    let href = link.href || '';
+                    if (href.includes(domain)) {{
+                        window.location.href = href;
+                        return {{url: href, match: 'domain'}};
+                    }}
+                }}
+
+                return null;
+            }})()
+        """)
+    finally:
+        cdp_disconnect(serial, ws2, cdp_port)
+
+    if matched:
+        print(f"    Backlink found ({matched.get('match')}): {matched.get('url', '')[:60]}")
+        print(f"  Waiting for backlink page to load...")
+        time.sleep(8)
+        print(f"  Browsing backlink page for ~5 seconds...")
+        for _ in range(2):
+            swipe(serial, 15, int(h * 0.7), 15, int(h * 0.4), 500)
+            time.sleep(1.5)
+        time.sleep(2)
+        return matched.get("url", domain)
+    else:
+        print(f"    No matching backlink found (looking for {domain})")
+        return None
+
+
 # ── Platform Flows ─────────────────────────────────────────────────────────────
 
-def run_gemini(serial, prompt, follow_up=None):
+def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     steps = []
     w, h = get_screen_size(serial)
 
@@ -250,43 +516,57 @@ def run_gemini(serial, prompt, follow_up=None):
     time.sleep(1)
 
     # Tap input area
+    print("  Tapping input area...")
     input_y = int(h * 0.85)
     tap(serial, w // 2, input_y)
     time.sleep(1)
 
+    print(f"  Typing prompt ({len(prompt)} chars)...")
     type_text(serial, prompt)
     steps.append("typed_prompt")
     time.sleep(1)
 
     # Find and tap Send (works with keyboard open)
+    print("  Sending prompt...")
     if not find_and_tap(serial, content_desc="Send message"):
         find_and_tap(serial, text="Send") or tap(serial, w - 50, input_y)
     steps.append("sent_prompt")
 
+    print("  Waiting for generation...")
     wait_for_generation(serial)
     steps.append("generation_complete")
 
+    print("  Scrolling...")
     adb_scroll(serial)
     steps.append("scrolled")
 
     if follow_up and follow_up.strip():
+        print("  Typing follow-up...")
         time.sleep(2)
         tap(serial, w // 2, input_y)
         time.sleep(1)
         type_text(serial, follow_up)
         time.sleep(1)
-        # Find and tap Send again
+        print("  Sending follow-up...")
         if not find_and_tap(serial, content_desc="Send message"):
             find_and_tap(serial, text="Send") or tap(serial, w - 50, input_y)
         steps.append("sent_followup")
+        print("  Waiting for follow-up generation...")
         wait_for_generation(serial)
+        print("  Scrolling follow-up...")
         adb_scroll(serial)
         steps.append("scrolled_followup")
+
+    # Backlink click (Type 3)
+    if backlinks:
+        matched = click_backlink_adb(serial, backlinks)
+        if matched:
+            steps.append(f"backlink_clicked:{matched}")
 
     return {"status": "success", "steps": steps}
 
 
-def run_chatgpt(serial, prompt, follow_up=None):
+def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
     steps = []
     w, h = get_screen_size(serial)
 
@@ -334,10 +614,16 @@ def run_chatgpt(serial, prompt, follow_up=None):
         adb_scroll(serial)
         steps.append("scrolled_followup")
 
+    # Backlink click (Type 3)
+    if backlinks:
+        matched = click_backlink_adb(serial, backlinks)
+        if matched:
+            steps.append(f"backlink_clicked:{matched}")
+
     return {"status": "success", "steps": steps}
 
 
-def run_perplexity(serial, prompt, follow_up=None):
+def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     steps = []
     w, h = get_screen_size(serial)
 
@@ -399,6 +685,12 @@ def run_perplexity(serial, prompt, follow_up=None):
         adb_scroll(serial)
         steps.append("scrolled_followup")
 
+    # Backlink click (Type 3)
+    if backlinks:
+        matched = click_backlink_adb(serial, backlinks)
+        if matched:
+            steps.append(f"backlink_clicked:{matched}")
+
     return {"status": "success", "steps": steps}
 
 
@@ -411,7 +703,7 @@ FLOW_MAP = {
 }
 
 
-def run_flow_adb(platform, serial, prompt, follow_up=None):
+def run_flow_adb(platform, serial, prompt, follow_up=None, backlinks=None):
     """
     ADB-only flow dispatcher. Same interface as flows.run_flow but no Appium.
     Returns {"status": "success"/"error", "steps": [...], "error": "..."}
@@ -421,6 +713,6 @@ def run_flow_adb(platform, serial, prompt, follow_up=None):
         return {"status": "error", "error": f"Unknown platform: {platform}", "steps": []}
 
     try:
-        return flow_fn(serial, prompt, follow_up)
+        return flow_fn(serial, prompt, follow_up, backlinks=backlinks)
     except Exception as e:
         return {"status": "error", "error": str(e), "steps": []}

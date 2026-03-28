@@ -289,7 +289,8 @@ def plan_sessions(max_clients=None):
     # For each client, find their next pending keyword (not done today)
     client_pending = []
     for client in clients:
-        pending = [kw for kw in client["keywords"]
+        kw_list = [kw["keyword"] if isinstance(kw, dict) else kw for kw in client["keywords"]]
+        pending = [kw for kw in kw_list
                    if not is_keyword_done_today(client["id"], kw)]
         if pending:
             client_pending.append((client, pending))
@@ -331,6 +332,13 @@ def plan_sessions(max_clients=None):
                 full_serial  = resolve_serial(short_serial, transport_map)
                 platform     = random.choice(PLATFORMS)
 
+                # Look up backlinks for this keyword
+                backlinks = []
+                for kw in client["keywords"]:
+                    if isinstance(kw, dict) and kw["keyword"] == keyword:
+                        backlinks = kw.get("backlinks", [])
+                        break
+
                 sessions.append({
                     "client":      client,
                     "keyword":     keyword,
@@ -340,6 +348,7 @@ def plan_sessions(max_clients=None):
                     "full_serial": full_serial,
                     "port":        port,
                     "use_adb":     dev_info.get("use_adb", False),
+                    "backlinks":   backlinks,
                 })
 
                 device_clients_claimed[did].add(client["id"])
@@ -444,7 +453,8 @@ def run_audit():
     device_iter = iter(free_devices)
 
     for client in clients:
-        for keyword in client["keywords"]:
+        kw_list = [kw["keyword"] if isinstance(kw, dict) else kw for kw in client["keywords"]]
+        for keyword in kw_list:
             if is_keyword_done_today(client["id"], keyword):
                 continue
             try:
@@ -514,7 +524,8 @@ def show_status():
             for rot_key in today_rot.get(d, {}):
                 if rot_key.startswith(f"{c['id']}:"):
                     done.append(rot_key.split(":", 1)[1])
-        remaining = [k for k in c["keywords"] if k not in done]
+        kw_strs = [kw["keyword"] if isinstance(kw, dict) else kw for kw in c["keywords"]]
+        remaining = [k for k in kw_strs if k not in done]
         print(f"  {c['biz_name']}: {len(done)} done, {len(remaining)} remaining")
 
 

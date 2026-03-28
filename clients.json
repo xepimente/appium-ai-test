@@ -9,11 +9,33 @@
     "biz_url": "https://www.maeschildcare.com",
     "gmb_url": "",
     "keywords": [
-      "bilingual childcare San Francisco",
-      "childcare Alamo Square",
-      "infant care San Francisco",
-      "preschool San Francisco",
-      "after school care San Francisco"
+      {
+        "keyword": "bilingual childcare San Francisco",
+        "backlinks": [
+          "https://www.maeschildcare.com/bilingual-program",
+          "https://www.maeschildcare.com/enrollment"
+        ]
+      },
+      {
+        "keyword": "childcare Alamo Square",
+        "backlinks": [
+          "https://www.maeschildcare.com/locations/alamo-square"
+        ]
+      },
+      {
+        "keyword": "infant care San Francisco",
+        "backlinks": []
+      },
+      {
+        "keyword": "preschool San Francisco",
+        "backlinks": [
+          "https://www.maeschildcare.com/preschool"
+        ]
+      },
+      {
+        "keyword": "after school care San Francisco",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -23,14 +45,38 @@
     "city": "Frederick",
     "state": "Maryland",
     "address": "801 Toll House Avenue, Frederick, MD 21701-4564, USA",
-    "biz_url": "",
+    "biz_url": "https://buppcontracting.com",
     "gmb_url": "https://maps.app.goo.gl/Y3AmHjRT2eChwW3Q6",
     "keywords": [
-      "Bupp Contracting & Remodeling LLC",
-      "Bupp Contracting & Remodeling LLC Free Roof Estimate",
-      "Bupp Contracting & Remodeling LLC Roofing Company Frederick",
-      "Bupp Contracting & Remodeling LLC Flat Roof Repair",
-      "Bupp Contracting & Remodeling LLC Roof Leak Repair"
+      {
+        "keyword": "Bupp Contracting & Remodeling LLC",
+        "backlinks": [
+          "https://buppcontracting.com/about",
+          "https://buppcontracting.com/services"
+        ]
+      },
+      {
+        "keyword": "Bupp Contracting & Remodeling LLC Free Roof Estimate",
+        "backlinks": [
+          "https://buppcontracting.com/free-estimate"
+        ]
+      },
+      {
+        "keyword": "Bupp Contracting & Remodeling LLC Roofing Company Frederick",
+        "backlinks": [
+          "https://buppcontracting.com/roofing"
+        ]
+      },
+      {
+        "keyword": "Bupp Contracting & Remodeling LLC Flat Roof Repair",
+        "backlinks": []
+      },
+      {
+        "keyword": "Bupp Contracting & Remodeling LLC Roof Leak Repair",
+        "backlinks": [
+          "https://buppcontracting.com/roof-leak-repair"
+        ]
+      }
     ]
   },
   {
@@ -40,14 +86,36 @@
     "city": "Garland",
     "state": "Texas",
     "address": "206 West Ridgewood Drive, Garland, TX 75041-3036, USA",
-    "biz_url": "",
+    "biz_url": "https://txhomebuyingpros.com",
     "gmb_url": "https://maps.app.goo.gl/DB4Yd32BfCuUVRFv7",
     "keywords": [
-      "sell house for cash",
-      "buy my house cash",
-      "sell my house fast",
-      "cash home buyers",
-      "cash for houses"
+      {
+        "keyword": "sell house for cash",
+        "backlinks": [
+          "https://txhomebuyingpros.com/sell-your-house",
+          "https://txhomebuyingpros.com/cash-offer"
+        ]
+      },
+      {
+        "keyword": "buy my house cash",
+        "backlinks": [
+          "https://txhomebuyingpros.com/we-buy-houses"
+        ]
+      },
+      {
+        "keyword": "sell my house fast",
+        "backlinks": []
+      },
+      {
+        "keyword": "cash home buyers",
+        "backlinks": [
+          "https://txhomebuyingpros.com/cash-home-buyers-garland"
+        ]
+      },
+      {
+        "keyword": "cash for houses",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -57,14 +125,36 @@
     "city": "Austin",
     "state": "Texas",
     "address": "2100 West Ben White Boulevard, Austin, TX 78704, USA",
-    "biz_url": "",
+    "biz_url": "https://austindentalstudio.com",
     "gmb_url": "",
     "keywords": [
-      "dentist Austin TX",
-      "teeth whitening Austin",
-      "emergency dentist Austin",
-      "dental implants Austin Texas",
-      "family dentist South Austin"
+      {
+        "keyword": "dentist Austin TX",
+        "backlinks": [
+          "https://austindentalstudio.com/about-us",
+          "https://austindentalstudio.com/new-patients"
+        ]
+      },
+      {
+        "keyword": "teeth whitening Austin",
+        "backlinks": [
+          "https://austindentalstudio.com/teeth-whitening"
+        ]
+      },
+      {
+        "keyword": "emergency dentist Austin",
+        "backlinks": []
+      },
+      {
+        "keyword": "dental implants Austin Texas",
+        "backlinks": [
+          "https://austindentalstudio.com/dental-implants"
+        ]
+      },
+      {
+        "keyword": "family dentist South Austin",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -74,14 +164,29 @@
     "city": "Seattle",
     "state": "Washington",
     "address": "Seattle, WA, USA",
-    "biz_url": "",
+    "biz_url": "https://pacificridgelandscaping.com",
     "gmb_url": "",
     "keywords": [
-      "landscaping company Seattle",
-      "lawn care service Seattle WA",
-      "landscape design Seattle",
-      "yard cleanup Seattle",
-      "sprinkler installation Seattle"
+      {
+        "keyword": "landscaping company Seattle",
+        "backlinks": []
+      },
+      {
+        "keyword": "lawn care service Seattle WA",
+        "backlinks": []
+      },
+      {
+        "keyword": "landscape design Seattle",
+        "backlinks": []
+      },
+      {
+        "keyword": "yard cleanup Seattle",
+        "backlinks": []
+      },
+      {
+        "keyword": "sprinkler installation Seattle",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -91,14 +196,36 @@
     "city": "Phoenix",
     "state": "Arizona",
     "address": "Phoenix, AZ, USA",
-    "biz_url": "",
+    "biz_url": "https://brightpathhvac.com",
     "gmb_url": "",
     "keywords": [
-      "AC repair Phoenix AZ",
-      "HVAC service Phoenix",
-      "air conditioning installation Phoenix",
-      "furnace repair Phoenix",
-      "emergency AC repair Phoenix"
+      {
+        "keyword": "AC repair Phoenix AZ",
+        "backlinks": [
+          "https://brightpathhvac.com/ac-repair"
+        ]
+      },
+      {
+        "keyword": "HVAC service Phoenix",
+        "backlinks": [
+          "https://brightpathhvac.com/services",
+          "https://brightpathhvac.com/hvac-maintenance"
+        ]
+      },
+      {
+        "keyword": "air conditioning installation Phoenix",
+        "backlinks": []
+      },
+      {
+        "keyword": "furnace repair Phoenix",
+        "backlinks": [
+          "https://brightpathhvac.com/furnace-repair"
+        ]
+      },
+      {
+        "keyword": "emergency AC repair Phoenix",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -108,14 +235,35 @@
     "city": "San Diego",
     "state": "California",
     "address": "San Diego, CA, USA",
-    "biz_url": "",
+    "biz_url": "https://harborviewautobody.com",
     "gmb_url": "",
     "keywords": [
-      "auto body shop San Diego",
-      "collision repair San Diego",
-      "car paint shop San Diego",
-      "dent removal San Diego",
-      "auto body repair near me San Diego"
+      {
+        "keyword": "auto body shop San Diego",
+        "backlinks": [
+          "https://harborviewautobody.com/about"
+        ]
+      },
+      {
+        "keyword": "collision repair San Diego",
+        "backlinks": [
+          "https://harborviewautobody.com/collision-repair"
+        ]
+      },
+      {
+        "keyword": "car paint shop San Diego",
+        "backlinks": []
+      },
+      {
+        "keyword": "dent removal San Diego",
+        "backlinks": []
+      },
+      {
+        "keyword": "auto body repair near me San Diego",
+        "backlinks": [
+          "https://harborviewautobody.com/services"
+        ]
+      }
     ]
   },
   {
@@ -125,14 +273,36 @@
     "city": "Chicago",
     "state": "Illinois",
     "address": "Chicago, IL, USA",
-    "biz_url": "",
+    "biz_url": "https://metroplumbingsolutions.com",
     "gmb_url": "",
     "keywords": [
-      "plumber Chicago IL",
-      "emergency plumber Chicago",
-      "pipe repair Chicago",
-      "drain cleaning Chicago",
-      "water heater installation Chicago"
+      {
+        "keyword": "plumber Chicago IL",
+        "backlinks": [
+          "https://metroplumbingsolutions.com/chicago",
+          "https://metroplumbingsolutions.com/about"
+        ]
+      },
+      {
+        "keyword": "emergency plumber Chicago",
+        "backlinks": [
+          "https://metroplumbingsolutions.com/emergency"
+        ]
+      },
+      {
+        "keyword": "pipe repair Chicago",
+        "backlinks": []
+      },
+      {
+        "keyword": "drain cleaning Chicago",
+        "backlinks": [
+          "https://metroplumbingsolutions.com/drain-cleaning"
+        ]
+      },
+      {
+        "keyword": "water heater installation Chicago",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -142,14 +312,29 @@
     "city": "Denver",
     "state": "Colorado",
     "address": "Denver, CO, USA",
-    "biz_url": "",
+    "biz_url": "https://sunriseyogawellness.com",
     "gmb_url": "",
     "keywords": [
-      "yoga studio Denver",
-      "hot yoga Denver CO",
-      "meditation classes Denver",
-      "yoga classes near me Denver",
-      "beginner yoga Denver"
+      {
+        "keyword": "yoga studio Denver",
+        "backlinks": []
+      },
+      {
+        "keyword": "hot yoga Denver CO",
+        "backlinks": []
+      },
+      {
+        "keyword": "meditation classes Denver",
+        "backlinks": []
+      },
+      {
+        "keyword": "yoga classes near me Denver",
+        "backlinks": []
+      },
+      {
+        "keyword": "beginner yoga Denver",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -159,14 +344,36 @@
     "city": "Tampa",
     "state": "Florida",
     "address": "Tampa, FL, USA",
-    "biz_url": "",
+    "biz_url": "https://clearwaterpoolservices.com",
     "gmb_url": "",
     "keywords": [
-      "pool cleaning service Tampa",
-      "pool repair Tampa FL",
-      "pool maintenance company Tampa",
-      "swimming pool service Tampa",
-      "pool resurfacing Tampa"
+      {
+        "keyword": "pool cleaning service Tampa",
+        "backlinks": [
+          "https://clearwaterpoolservices.com/pool-cleaning"
+        ]
+      },
+      {
+        "keyword": "pool repair Tampa FL",
+        "backlinks": [
+          "https://clearwaterpoolservices.com/pool-repair",
+          "https://clearwaterpoolservices.com/services"
+        ]
+      },
+      {
+        "keyword": "pool maintenance company Tampa",
+        "backlinks": []
+      },
+      {
+        "keyword": "swimming pool service Tampa",
+        "backlinks": []
+      },
+      {
+        "keyword": "pool resurfacing Tampa",
+        "backlinks": [
+          "https://clearwaterpoolservices.com/resurfacing"
+        ]
+      }
     ]
   },
   {
@@ -176,14 +383,33 @@
     "city": "Oakland",
     "state": "California",
     "address": "Oakland, CA, USA",
-    "biz_url": "",
+    "biz_url": "https://goldengatemoving.com",
     "gmb_url": "",
     "keywords": [
-      "moving company Oakland CA",
-      "local movers Oakland",
-      "cheap movers Oakland",
-      "residential moving Oakland",
-      "furniture movers Oakland"
+      {
+        "keyword": "moving company Oakland CA",
+        "backlinks": [
+          "https://goldengatemoving.com/oakland"
+        ]
+      },
+      {
+        "keyword": "local movers Oakland",
+        "backlinks": []
+      },
+      {
+        "keyword": "cheap movers Oakland",
+        "backlinks": []
+      },
+      {
+        "keyword": "residential moving Oakland",
+        "backlinks": [
+          "https://goldengatemoving.com/residential"
+        ]
+      },
+      {
+        "keyword": "furniture movers Oakland",
+        "backlinks": []
+      }
     ]
   },
   {
@@ -193,14 +419,36 @@
     "city": "Minneapolis",
     "state": "Minnesota",
     "address": "Minneapolis, MN, USA",
-    "biz_url": "",
+    "biz_url": "https://lakesidepethospital.com",
     "gmb_url": "",
     "keywords": [
-      "veterinarian Minneapolis",
-      "animal hospital Minneapolis",
-      "emergency vet Minneapolis",
-      "pet clinic Minneapolis MN",
-      "dog vet near me Minneapolis"
+      {
+        "keyword": "veterinarian Minneapolis",
+        "backlinks": [
+          "https://lakesidepethospital.com/about",
+          "https://lakesidepethospital.com/team"
+        ]
+      },
+      {
+        "keyword": "animal hospital Minneapolis",
+        "backlinks": [
+          "https://lakesidepethospital.com/services"
+        ]
+      },
+      {
+        "keyword": "emergency vet Minneapolis",
+        "backlinks": []
+      },
+      {
+        "keyword": "pet clinic Minneapolis MN",
+        "backlinks": []
+      },
+      {
+        "keyword": "dog vet near me Minneapolis",
+        "backlinks": [
+          "https://lakesidepethospital.com/dogs"
+        ]
+      }
     ]
   },
   {
@@ -210,14 +458,36 @@
     "city": "Atlanta",
     "state": "Georgia",
     "address": "Atlanta, GA, USA",
-    "biz_url": "",
+    "biz_url": "https://prestigeroofinggroup.com",
     "gmb_url": "",
     "keywords": [
-      "roofing company Atlanta GA",
-      "roof replacement Atlanta",
-      "roof repair Atlanta",
-      "storm damage roof Atlanta",
-      "best roofer Atlanta"
+      {
+        "keyword": "roofing company Atlanta GA",
+        "backlinks": [
+          "https://prestigeroofinggroup.com/about"
+        ]
+      },
+      {
+        "keyword": "roof replacement Atlanta",
+        "backlinks": [
+          "https://prestigeroofinggroup.com/roof-replacement",
+          "https://prestigeroofinggroup.com/gallery"
+        ]
+      },
+      {
+        "keyword": "roof repair Atlanta",
+        "backlinks": [
+          "https://prestigeroofinggroup.com/roof-repair"
+        ]
+      },
+      {
+        "keyword": "storm damage roof Atlanta",
+        "backlinks": []
+      },
+      {
+        "keyword": "best roofer Atlanta",
+        "backlinks": []
+      }
     ]
   }
 ]

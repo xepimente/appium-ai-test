@@ -644,8 +644,8 @@ def main():
         # Build all keyword jobs: (client, keyword, random_platform)
         jobs = []
         for client in clients:
-            keywords = client.get("keywords", [])
-            for keyword in keywords:
+            for kw in client.get("keywords", []):
+                keyword = kw["keyword"] if isinstance(kw, dict) else kw
                 platform = args.platform if args.platform else random.choice(PLATFORMS)
                 jobs.append({"client": client, "keyword": keyword, "platform": platform})
 
@@ -742,12 +742,13 @@ def main():
 
     results = []
     for client in clients:
-        keywords = client.get("keywords", [])
-        if not keywords:
+        raw_kws = client.get("keywords", [])
+        if not raw_kws:
             continue
 
-        kw_idx = min(args.keyword_index, len(keywords) - 1)
-        keyword = keywords[kw_idx]
+        kw_idx = min(args.keyword_index, len(raw_kws) - 1)
+        kw_entry = raw_kws[kw_idx]
+        keyword = kw_entry["keyword"] if isinstance(kw_entry, dict) else kw_entry
 
         for platform in platforms:
             result = run_audit(

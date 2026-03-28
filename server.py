@@ -389,7 +389,8 @@ def get_clients_route():
                     })
 
         done_keywords = [d["keyword"] for d in done]
-        remaining     = [k for k in c["keywords"] if k not in done_keywords]
+        kw_strs = [kw["keyword"] if isinstance(kw, dict) else kw for kw in c["keywords"]]
+        remaining = [k for k in kw_strs if k not in done_keywords]
 
         # How many devices can still serve THIS client today
         devices_available = sum(
@@ -503,7 +504,8 @@ def run_audit_endpoint():
     # Build jobs: all keywords, 1 random platform each
     jobs = []
     for client in clients:
-        for keyword in client.get("keywords", []):
+        for kw in client.get("keywords", []):
+            keyword = kw["keyword"] if isinstance(kw, dict) else kw
             platform = platform_filter if platform_filter else random.choice(AUDIT_PLATFORMS)
             jobs.append({"client": client, "keyword": keyword, "platform": platform})
 
