@@ -284,6 +284,11 @@ def log_session(client, keyword, prompt, follow_up, device_id, status,
             "username":   proxy_info.get("username"),
             "proxy_host": proxy_info.get("proxy_host"),
             "proxy_port": proxy_info.get("proxy_port"),
+            "ip":         proxy_info.get("ip"),
+            "ip_city":    proxy_info.get("ip_city"),
+            "ip_region":  proxy_info.get("ip_region"),
+            "ip_country": proxy_info.get("ip_country"),
+            "ip_zip":     proxy_info.get("ip_zip"),
         }
 
     if platform_results:
@@ -291,8 +296,9 @@ def log_session(client, keyword, prompt, follow_up, device_id, status,
         for pr in platform_results:
             plat = pr.get("platform", "unknown")
             entry["platforms"][plat] = {
-                "status": "success" if pr.get("success") else "error",
-                "steps":  pr.get("steps", []),
+                "status":     "success" if pr.get("success") else "error",
+                "duration_s": pr.get("duration_s", 0),
+                "error":      pr.get("error", ""),
             }
 
     with _log_lock:

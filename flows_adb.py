@@ -19,7 +19,7 @@ import time
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 CHROME_PACKAGE = "com.android.chrome"
-GENERATION_TIMEOUT = 120
+GENERATION_TIMEOUT = 180
 GENERATION_POLL = 3
 KEYBOARD_HIDE_WAIT = 10
 
@@ -141,14 +141,11 @@ def dismiss_chrome_fre(serial):
 
 
 def navigate_to_url(serial, url):
-    """Tap address bar, type URL, press Enter."""
+    """Navigate Chrome to a URL using am start intent (works from any page state)."""
     print(f"  Navigating to {url}...")
-    if not find_and_tap(serial, resource_id="search_box_text"):
-        find_and_tap(serial, resource_id="url_bar")
-    time.sleep(1)
-    adb(serial, "shell", "input", "text", url, timeout=10)
-    time.sleep(0.3)
-    press_enter(serial)
+    full_url = url if url.startswith("http") else f"https://{url}"
+    adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
+        "-d", full_url, CHROME_PACKAGE, timeout=10)
     print("  Waiting for page to load...")
     time.sleep(8)
 
@@ -236,21 +233,71 @@ def adb_scroll(serial, swipes=12, px=400, duration_ms=700, pause_s=2.2):
 
 # ── Wait for Generation ───────────────────────────────────────────────────────
 
+def _has_response_content(xml):
+    """Check if the UI dump contains actual AI response text (not just loading)."""
+    # Look for response indicators across platforms
+    for pattern in [
+        'content-desc="Copy"',       # Gemini/ChatGPT copy button
+        'content-desc="Share"',      # Share button appears after response
+        'content-desc="Read aloud"', # Gemini read aloud
+        'text="Sources"',            # Sources button = response done
+        'text="Try again"',          # Error state = generation done (failed)
+    ]:
+        if pattern in xml:
+            return True
+    return False
+
+
 def wait_for_generation(serial, max_wait=GENERATION_TIMEOUT):
-    """Wait until AI finishes generating by checking for Stop button."""
+    """
+    Wait until AI finishes generating.
+
+    Detection strategy:
+    1. If Stop button visible → still generating, keep waiting
+    2. If no Stop button AND response content found → done
+    3. If no Stop button AND no response content → still loading, keep waiting
+    4. If max_wait reached → timeout, return False
+
+    Returns True if response loaded, False if timed out.
+    """
     time.sleep(5)
     start = time.time()
+    no_stop_count = 0
+
     while time.time() - start < max_wait:
+        elapsed = int(time.time() - start)
         xml = dump_ui(serial)
-        has_stop = False
-        for pattern in ["Stop streaming", "Stop generating", "Stop response"]:
-            if pattern in xml:
-                has_stop = True
-                break
-        if not has_stop:
+
+        has_stop = any(p in xml for p in [
+            "Stop streaming", "Stop generating", "Stop response"
+        ])
+
+        if has_stop:
+            no_stop_count = 0
+            if elapsed % 15 == 0:
+                print(f"    Still generating... ({elapsed}s)")
+            time.sleep(GENERATION_POLL)
+            continue
+
+        # No stop button — check if response content exists
+        if _has_response_content(xml):
+            print(f"    Generation complete ({elapsed}s)")
             time.sleep(2)
-            break
+            return True
+
+        # No stop button, no response content — might still be loading
+        no_stop_count += 1
+        if no_stop_count >= 3:
+            # 3 checks with no stop and no content — assume page didn't load
+            print(f"    No response detected after {elapsed}s — possible timeout")
+            return False
+
+        if elapsed % 10 == 0:
+            print(f"    Waiting for response... ({elapsed}s)")
         time.sleep(GENERATION_POLL)
+
+    print(f"    Generation timed out after {max_wait}s")
+    return False
 
 
 # ── Backlink Click (Type 3) ────────────────────────────────────────────────────
@@ -533,7 +580,10 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     steps.append("sent_prompt")
 
     print("  Waiting for generation...")
-    wait_for_generation(serial)
+    gen_ok = wait_for_generation(serial)
+    if not gen_ok:
+        steps.append("generation_timeout")
+        return {"status": "error", "error": "Generation timed out", "steps": steps}
     steps.append("generation_complete")
 
     print("  Scrolling...")
@@ -552,7 +602,10 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
             find_and_tap(serial, text="Send") or tap(serial, w - 50, input_y)
         steps.append("sent_followup")
         print("  Waiting for follow-up generation...")
-        wait_for_generation(serial)
+        fu_ok = wait_for_generation(serial)
+        if not fu_ok:
+            steps.append("followup_timeout")
+            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
         print("  Scrolling follow-up...")
         adb_scroll(serial)
         steps.append("scrolled_followup")
@@ -570,8 +623,8 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
     steps = []
     w, h = get_screen_size(serial)
 
-    dismiss_chrome_fre(serial)
-    steps.append("dismissed_fre")
+    # dismiss_chrome_fre(serial)
+    # steps.append("dismissed_fre")
 
     navigate_to_url(serial, "chatgpt.com")
     steps.append("navigated")
@@ -594,7 +647,10 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
         find_and_tap(serial, content_desc="Send prompt") or find_and_tap(serial, text="Send")
     steps.append("sent_prompt")
 
-    wait_for_generation(serial)
+    gen_ok = wait_for_generation(serial)
+    if not gen_ok:
+        steps.append("generation_timeout")
+        return {"status": "error", "error": "Generation timed out", "steps": steps}
     steps.append("generation_complete")
 
     adb_scroll(serial)
@@ -610,7 +666,10 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
         find_and_tap(serial, resource_id="composer-submit-button") or \
             find_and_tap(serial, content_desc="Send prompt")
         steps.append("sent_followup")
-        wait_for_generation(serial)
+        fu_ok = wait_for_generation(serial)
+        if not fu_ok:
+            steps.append("followup_timeout")
+            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
         adb_scroll(serial)
         steps.append("scrolled_followup")
 
@@ -627,8 +686,8 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     steps = []
     w, h = get_screen_size(serial)
 
-    dismiss_chrome_fre(serial)
-    steps.append("dismissed_fre")
+    # dismiss_chrome_fre(serial)
+    # steps.append("dismissed_fre")
 
     navigate_to_url(serial, "www.perplexity.ai")
     steps.append("navigated")
@@ -663,7 +722,10 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     steps.append("sent_prompt")
 
     print("  Waiting for generation...")
-    wait_for_generation(serial)
+    gen_ok = wait_for_generation(serial)
+    if not gen_ok:
+        steps.append("generation_timeout")
+        return {"status": "error", "error": "Generation timed out", "steps": steps}
     steps.append("generation_complete")
 
     print("  Scrolling...")
@@ -681,7 +743,10 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
         time.sleep(1)
         hide_keyboard_and_submit(serial)
         steps.append("sent_followup")
-        wait_for_generation(serial)
+        fu_ok = wait_for_generation(serial)
+        if not fu_ok:
+            steps.append("followup_timeout")
+            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
         adb_scroll(serial)
         steps.append("scrolled_followup")
 

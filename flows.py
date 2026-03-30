@@ -28,7 +28,7 @@ from selenium.common.exceptions import (
 CHROME_PACKAGE    = "com.android.chrome"
 DEFAULT_WAIT      = 10
 PAGE_LOAD_WAIT    = 10
-GENERATION_TIMEOUT = 120   # max seconds to wait for AI to finish generating
+GENERATION_TIMEOUT = 180   # max seconds to wait for AI to finish generating
 GENERATION_POLL    = 3     # seconds between checks
 
 
@@ -147,77 +147,62 @@ def dismiss_first_run_dialogs(driver):
 
 def navigate_to_url(driver, url):
     """
-    Tap Chrome address bar and navigate to URL.
+    Navigate Chrome to a URL using ADB intent (works from any page state).
     Must be in NATIVE_APP context.
     """
-    search_box = None
-    for selector in [
-        (AppiumBy.ID, "com.android.chrome:id/search_box_text"),
-        (AppiumBy.ID, "com.android.chrome:id/url_bar"),
-        (AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().textContains("Search Google")'),
-    ]:
-        try:
-            search_box = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located(selector)
-            )
-            break
-        except TimeoutException:
-            continue
-
-    if not search_box:
-        raise RuntimeError("Could not find Chrome address bar")
-
-    search_box.click()
-    time.sleep(0.8)
-
-    # After tap, Chrome shows url_bar — type URL there
-    url_bar = None
-    for selector in [
-        (AppiumBy.ID, "com.android.chrome:id/url_bar"),
-        (AppiumBy.ID, "com.android.chrome:id/search_box_text"),
-    ]:
-        try:
-            url_bar = WebDriverWait(driver, 3).until(
-                EC.presence_of_element_located(selector)
-            )
-            break
-        except TimeoutException:
-            continue
-
-    target = url_bar or search_box
-    target.clear()
-    target.send_keys(url)
-    time.sleep(0.5)
-
-    # Tap first autocomplete suggestion, or press Enter
-    try:
-        suggestion = WebDriverWait(driver, 3).until(
-            EC.presence_of_element_located((
-                AppiumBy.ANDROID_UIAUTOMATOR,
-                f'new UiSelector().resourceId("com.android.chrome:id/line_1").text("{url}")'
-            ))
+    import subprocess
+    full_url = url if url.startswith("http") else f"https://{url}"
+    # Get device serial from driver capabilities
+    serial = driver.capabilities.get("udid", "")
+    if serial:
+        subprocess.run(
+            ["adb", "-s", serial, "shell", "am", "start", "-a",
+             "android.intent.action.VIEW", "-d", full_url,
+             "com.android.chrome"],
+            capture_output=True, timeout=10,
         )
-        suggestion.click()
-    except TimeoutException:
-        driver.press_keycode(66)
-
+    else:
+        # Fallback: use driver to start activity
+        driver.execute_script("mobile: shell", {
+            "command": "am",
+            "args": ["start", "-a", "android.intent.action.VIEW", "-d", full_url,
+                     "com.android.chrome"],
+        })
     time.sleep(5)
 
 
 # ── Wait for AI Generation ─────────────────────────────────────────────────────
 
+def _has_response_content_appium(driver, platform):
+    """Check if the page has actual response content via JS."""
+    try:
+        result = driver.execute_script("""
+            // Check for common response indicators
+            let copyBtns = document.querySelectorAll('[aria-label="Copy"], [data-testid="copy-turn-action-button"]');
+            if (copyBtns.length > 0) return true;
+            // Check for Sources button
+            let sources = document.querySelectorAll('button, [role="button"]');
+            for (let s of sources) {
+                if (s.textContent && s.textContent.trim().toLowerCase().includes('source')) return true;
+            }
+            // Check for response text containers
+            let responses = document.querySelectorAll('[data-message-author-role="assistant"], .model-response, .prose');
+            for (let r of responses) {
+                if (r.textContent && r.textContent.trim().length > 50) return true;
+            }
+            return false;
+        """)
+        return bool(result)
+    except Exception:
+        return False
+
+
 def wait_for_generation(driver, platform, timeout=GENERATION_TIMEOUT):
     """
     Wait until the AI platform finishes generating its response.
-    Detects this by checking if the 'Stop generating' button disappears.
-    Must be called in WEBVIEW context.
 
-    Each platform has a different stop button:
-      ChatGPT:    button[aria-label='Stop streaming'] or button with 'Stop' text
-      Gemini:     button[aria-label='Stop response'] or similar
-      Perplexity: button with stop/loading indicator
+    Returns True if response loaded, False if timed out.
     """
-    # CSS selectors that indicate generation is still in progress
     stop_selectors = {
         "ChatGPT": [
             "button[aria-label='Stop streaming']",
@@ -238,14 +223,14 @@ def wait_for_generation(driver, platform, timeout=GENERATION_TIMEOUT):
     selectors = stop_selectors.get(platform, [])
     if not selectors:
         time.sleep(PAGE_LOAD_WAIT)
-        return
+        return True
 
-    # First, wait a few seconds for generation to START (stop button to appear)
     time.sleep(3)
+    start = time.time()
+    no_stop_count = 0
 
-    # Then poll until stop button disappears (generation finished)
-    deadline = time.time() + timeout
-    while time.time() < deadline:
+    while time.time() - start < timeout:
+        elapsed = int(time.time() - start)
         still_generating = False
         for css in selectors:
             try:
@@ -256,24 +241,30 @@ def wait_for_generation(driver, platform, timeout=GENERATION_TIMEOUT):
             except (NoSuchElementException, StaleElementReferenceException):
                 continue
 
-        if not still_generating:
-            # Double-check: wait 2s and verify it's really done
-            time.sleep(2)
-            still_going = False
-            for css in selectors:
-                try:
-                    el = driver.find_element(By.CSS_SELECTOR, css)
-                    if el.is_displayed():
-                        still_going = True
-                        break
-                except (NoSuchElementException, StaleElementReferenceException):
-                    continue
-            if not still_going:
-                return  # generation complete
+        if still_generating:
+            no_stop_count = 0
+            if elapsed % 15 == 0:
+                print(f"    Still generating... ({elapsed}s)")
+            time.sleep(GENERATION_POLL)
+            continue
 
+        # No stop button — check if response content exists
+        if _has_response_content_appium(driver, platform):
+            print(f"    Generation complete ({elapsed}s)")
+            time.sleep(2)
+            return True
+
+        no_stop_count += 1
+        if no_stop_count >= 3:
+            print(f"    No response detected after {elapsed}s — possible timeout")
+            return False
+
+        if elapsed % 10 == 0:
+            print(f"    Waiting for response... ({elapsed}s)")
         time.sleep(GENERATION_POLL)
 
-    # Timeout — generation took too long, proceed anyway
+    print(f"    Generation timed out after {timeout}s")
+    return False
 
 
 # ── WebView Text Input ────────────────────────────────────────────────────────
@@ -379,7 +370,11 @@ def run_gemini(driver, serial, prompt, follow_up=None, backlinks=None):
     steps.append("sent_prompt")
 
     # Wait for AI to finish generating (stay in WebView to detect stop button)
-    wait_for_generation(driver, "Gemini")
+    gen_ok = wait_for_generation(driver, "Gemini")
+    if not gen_ok:
+        steps.append("generation_timeout")
+        switch_to_native(driver)
+        return {"status": "error", "error": "Generation timed out", "steps": steps}
     steps.append("generation_complete")
 
     # ADB scroll works from any context
@@ -403,7 +398,11 @@ def run_gemini(driver, serial, prompt, follow_up=None, backlinks=None):
         ], timeout=10)
         send_btn2.click()
         steps.append("sent_followup")
-        wait_for_generation(driver, "Gemini")
+        fu_ok = wait_for_generation(driver, "Gemini")
+        if not fu_ok:
+            steps.append("followup_timeout")
+            switch_to_native(driver)
+            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
         steps.append("followup_generation_complete")
         adb_scroll(serial)
         steps.append("scrolled_followup")
@@ -423,8 +422,8 @@ def run_chatgpt(driver, serial, prompt, follow_up=None, backlinks=None):
     steps = []
 
     # ── Native: FRE + navigate ──
-    dismiss_first_run_dialogs(driver)
-    steps.append("dismissed_first_run")
+    # dismiss_first_run_dialogs(driver)
+    # steps.append("dismissed_first_run")
 
     navigate_to_url(driver, "chatgpt.com")
     steps.append("navigated_to_chatgpt")
@@ -461,7 +460,11 @@ def run_chatgpt(driver, serial, prompt, follow_up=None, backlinks=None):
     steps.append("sent_prompt")
 
     # Wait for AI to finish generating (detect stop button disappearing)
-    wait_for_generation(driver, "ChatGPT")
+    gen_ok = wait_for_generation(driver, "ChatGPT")
+    if not gen_ok:
+        steps.append("generation_timeout")
+        switch_to_native(driver)
+        return {"status": "error", "error": "Generation timed out", "steps": steps}
     steps.append("generation_complete")
 
     # ADB scroll
@@ -486,7 +489,11 @@ def run_chatgpt(driver, serial, prompt, follow_up=None, backlinks=None):
         ], timeout=10)
         send_btn2.click()
         steps.append("sent_followup")
-        wait_for_generation(driver, "ChatGPT")
+        fu_ok = wait_for_generation(driver, "ChatGPT")
+        if not fu_ok:
+            steps.append("followup_timeout")
+            switch_to_native(driver)
+            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
         steps.append("followup_generation_complete")
         adb_scroll(serial)
         steps.append("scrolled_followup")
@@ -506,8 +513,8 @@ def run_perplexity(driver, serial, prompt, follow_up=None, backlinks=None):
     steps = []
 
     # ── Native: FRE + navigate ──
-    dismiss_first_run_dialogs(driver)
-    steps.append("dismissed_first_run")
+    # dismiss_first_run_dialogs(driver)
+    # steps.append("dismissed_first_run")
 
     navigate_to_url(driver, "www.perplexity.ai")
     steps.append("navigated_to_perplexity")
@@ -579,7 +586,11 @@ def run_perplexity(driver, serial, prompt, follow_up=None, backlinks=None):
     steps.append("sent_prompt")
 
     # Wait for AI to finish generating
-    wait_for_generation(driver, "Perplexity")
+    gen_ok = wait_for_generation(driver, "Perplexity")
+    if not gen_ok:
+        steps.append("generation_timeout")
+        switch_to_native(driver)
+        return {"status": "error", "error": "Generation timed out", "steps": steps}
     steps.append("generation_complete")
 
     # ADB scroll
@@ -603,7 +614,11 @@ def run_perplexity(driver, serial, prompt, follow_up=None, backlinks=None):
         ], timeout=10)
         driver.execute_script("arguments[0].disabled = false; arguments[0].click();", send_btn2)
         steps.append("sent_followup")
-        wait_for_generation(driver, "Perplexity")
+        fu_ok = wait_for_generation(driver, "Perplexity")
+        if not fu_ok:
+            steps.append("followup_timeout")
+            switch_to_native(driver)
+            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
         steps.append("followup_generation_complete")
         adb_scroll(serial)
         steps.append("scrolled_followup")

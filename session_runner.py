@@ -42,47 +42,53 @@ def _get_lock(device_id: str) -> threading.Lock:
 def _run_single_platform(serial: str, full_serial: str, port: int,
                          platform: str, prompt: str, follow_up: Optional[str],
                          device_id: str, use_adb: bool,
-                         backlinks: List) -> Dict[str, Any]:
+                         backlinks: List,
+                         is_first: bool = True) -> Dict[str, Any]:
     """
     Run one platform flow on a specific device.
     Internal helper — does NOT manage proxy or locks.
+
+    is_first: if True, clears Chrome and launches fresh.
+              if False, Chrome is already open — just navigate to new platform.
     """
     driver = None
+    platform_start = time.time()
     try:
         if use_adb:
             print(f"[{device_id}] ADB-only mode — {platform}")
-            clear_chrome_adb(full_serial)
-            time.sleep(1)
-
-            subprocess.run(
-                ["adb", "-s", full_serial, "shell", "am", "start", "-n",
-                 "com.android.chrome/com.google.android.apps.chrome.Main"],
-                capture_output=True, timeout=10,
-            )
-            time.sleep(3)
+            if is_first:
+                clear_chrome_adb(full_serial)
+                time.sleep(1)
+                subprocess.run(
+                    ["adb", "-s", full_serial, "shell", "am", "start", "-n",
+                     "com.android.chrome/com.google.android.apps.chrome.Main"],
+                    capture_output=True, timeout=10,
+                )
+                time.sleep(3)
 
             result = run_flow_adb(platform, full_serial, prompt, follow_up, backlinks=backlinks)
 
         else:
-            print(f"[{device_id}] Clearing Chrome on {full_serial}...")
-            clear_chrome(full_serial)
-            time.sleep(1)
+            if is_first:
+                print(f"[{device_id}] Clearing Chrome on {full_serial}...")
+                clear_chrome(full_serial)
+                time.sleep(1)
 
-            subprocess.run(
-                ["adb", "-s", full_serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0"],
-                capture_output=True, timeout=5,
-            )
-            subprocess.run(
-                ["adb", "-s", full_serial, "shell", "settings", "put", "system", "user_rotation", "0"],
-                capture_output=True, timeout=5,
-            )
+                subprocess.run(
+                    ["adb", "-s", full_serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0"],
+                    capture_output=True, timeout=5,
+                )
+                subprocess.run(
+                    ["adb", "-s", full_serial, "shell", "settings", "put", "system", "user_rotation", "0"],
+                    capture_output=True, timeout=5,
+                )
 
             options = UiAutomator2Options()
             options.platform_name       = "Android"
             options.device_name         = serial
             options.udid                = full_serial
             options.automation_name     = "UiAutomator2"
-            options.no_reset            = False
+            options.no_reset            = True if not is_first else False
             options.new_command_timeout = 300
             options.orientation         = "PORTRAIT"
             options.app_package         = "com.android.chrome"
@@ -99,27 +105,29 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
             result = run_flow(platform, driver, full_serial, prompt, follow_up, backlinks=backlinks)
 
         success = result.get("status") == "success"
-        output  = f"steps={result.get('steps', [])} error={result.get('error', '')}"
+        duration = round(time.time() - platform_start, 1)
+        error = result.get("error", "")
 
-        print(f"[{device_id}] {platform} {'SUCCESS' if success else 'FAILED'} — {output}")
+        print(f"[{device_id}] {platform} {'SUCCESS' if success else 'FAILED'} — {duration}s{' — ' + error if error else ''}")
         return {
-            "success":   success,
-            "device_id": device_id,
-            "platform":  platform,
-            "output":    output,
-            "steps":     result.get("steps", []),
+            "success":    success,
+            "device_id":  device_id,
+            "platform":   platform,
+            "duration_s": duration,
+            "error":      error,
         }
 
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
+        duration = round(time.time() - platform_start, 1)
         print(f"[{device_id}] {platform} ERROR — {err}")
         traceback.print_exc()
         return {
-            "success":   False,
-            "device_id": device_id,
-            "platform":  platform,
-            "output":    err,
-            "steps":     [],
+            "success":    False,
+            "device_id":  device_id,
+            "platform":   platform,
+            "duration_s": duration,
+            "error":      err,
         }
 
     finally:
@@ -170,12 +178,13 @@ def run_session(serial: str, full_serial: str, port: int,
         platform_results = []
         all_steps = []
 
-        for plat in platforms:
+        for i, plat in enumerate(platforms):
             print(f"\n[{device_id}] ── {plat} ──")
             result = _run_single_platform(
                 serial=serial, full_serial=full_serial, port=port,
                 platform=plat, prompt=prompt, follow_up=follow_up,
                 device_id=device_id, use_adb=use_adb, backlinks=backlinks,
+                is_first=(i == 0),
             )
             platform_results.append(result)
             all_steps.extend(result.get("steps", []))

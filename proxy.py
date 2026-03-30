@@ -76,6 +76,54 @@ def build_proxy_username(proxy_config: Dict[str, Any]) -> str:
     return "-".join(parts)
 
 
+# ── IP Check ──────────────────────────────────────────────────────────────────
+
+def get_device_ip(serial: str, timeout: int = 10) -> Dict[str, Any]:
+    """
+    Get the device's current public IP by curling ifconfig.me via ADB.
+    Then look up geolocation via ipinfo.io from the Mac.
+    """
+    import subprocess
+
+    # Get IP from device
+    try:
+        result = subprocess.run(
+            ["adb", "-s", serial, "shell", "curl", "-s", "--connect-timeout", "5",
+             "https://ifconfig.me"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        ip = result.stdout.strip()
+        if not ip or "not found" in ip.lower():
+            # Fallback: use wget
+            result = subprocess.run(
+                ["adb", "-s", serial, "shell", "wget", "-qO-",
+                 "https://ifconfig.me"],
+                capture_output=True, text=True, timeout=timeout,
+            )
+            ip = result.stdout.strip()
+    except Exception:
+        return {"ip": "unknown", "error": "failed to get IP from device"}
+
+    if not ip or len(ip) > 50:
+        return {"ip": "unknown", "error": "invalid response"}
+
+    # Look up geolocation
+    try:
+        resp = requests.get(f"https://ipinfo.io/{ip}/json", timeout=5)
+        info = resp.json()
+        return {
+            "ip": ip,
+            "city": info.get("city", ""),
+            "region": info.get("region", ""),
+            "country": info.get("country", ""),
+            "postal": info.get("postal", ""),
+            "timezone": info.get("timezone", ""),
+            "org": info.get("org", ""),
+        }
+    except Exception:
+        return {"ip": ip}
+
+
 # ── Device Manager API ────────────────────────────────────────────────────────
 
 def connect_proxy(serial: str, proxy_config: Dict[str, Any],
@@ -97,6 +145,17 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
     if not PROXY_PASSWORD:
         print("  [Proxy] PROXY_PASSWORD not set — skipping proxy connection")
         return {"status": "SKIPPED", "error": "PROXY_PASSWORD env var not set"}
+
+    # Grant VPN permission before connecting (pm clear resets it)
+    import subprocess
+    try:
+        subprocess.run(
+            ["adb", "-s", serial, "shell", "appops", "set",
+             "net.typeblog.socks", "ACTIVATE_VPN", "allow"],
+            capture_output=True, timeout=5,
+        )
+    except Exception:
+        pass
 
     username = build_proxy_username(proxy_config)
 
@@ -122,7 +181,12 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
 
         if status == "CONNECTED":
             print(f"  [Proxy] Connected successfully")
+            # Wait for VPN to stabilize then check actual IP
+            time.sleep(3)
+            ip_info = get_device_ip(serial)
+            print(f"  [Proxy] Device IP: {ip_info.get('ip', 'unknown')} ({ip_info.get('city', '?')}, {ip_info.get('region', '?')})")
         else:
+            ip_info = {}
             error = data.get("error", {})
             print(f"  [Proxy] Failed: {status} — {error.get('errorMessage', '')}")
 
@@ -131,6 +195,11 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
             "username": username,
             "proxy_host": PROXY_HOST,
             "proxy_port": PROXY_PORT,
+            "ip": ip_info.get("ip"),
+            "ip_city": ip_info.get("city"),
+            "ip_region": ip_info.get("region"),
+            "ip_country": ip_info.get("country"),
+            "ip_zip": ip_info.get("postal"),
             "response": data,
         }
 
