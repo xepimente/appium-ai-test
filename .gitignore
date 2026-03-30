@@ -1,3 +1,5 @@
+.env
+__pycache__/
 __pycache__/flows_adb.cpython-314.pyc
 __pycache__/flows.cpython-314.pyc
 __pycache__/main.cpython-314.pyc

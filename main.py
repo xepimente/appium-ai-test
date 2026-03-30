@@ -85,19 +85,44 @@ def _short_serial(full_transport):
     return full_transport
 
 
+def _get_connected_serials():
+    """Return set of short serials currently connected via ADB."""
+    try:
+        result = subprocess.run(
+            ["adb", "devices"], capture_output=True, text=True, timeout=10
+        )
+    except Exception:
+        return set()
+
+    connected = set()
+    for line in result.stdout.splitlines()[1:]:
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[1] == "device":
+            connected.add(_short_serial(parts[0]))
+    return connected
+
+
 def _load_device_pool():
     """
     Load device pool from active_devices.json if present,
     otherwise discover live from adb devices.
-    active_devices.json format: {"device-001": {"serial": ..., "port": 4723}, ...}
+
+    Only includes devices that are actually connected via ADB right now.
     """
     if os.path.exists(ACTIVE_DEVICES_FILE):
         try:
             with open(ACTIVE_DEVICES_FILE, "r") as f:
                 active = json.load(f)
             if active:
-                print(f"Using active_devices.json — {len(active)} device(s)")
-                return active
+                connected = _get_connected_serials()
+                pool = {}
+                for label, info in active.items():
+                    if info["serial"] in connected:
+                        pool[label] = info
+                    else:
+                        print(f"  {label} ({info['serial']}) — offline, skipping")
+                print(f"Using active_devices.json — {len(pool)}/{len(active)} device(s) online")
+                return pool
         except Exception:
             pass
 
@@ -233,7 +258,11 @@ def update_status(device_id, client_id, keyword, status):
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
-def log_session(client, keyword, platform, prompt, follow_up, device_id, status):
+def log_session(client, keyword, prompt, follow_up, device_id, status,
+                proxy_info=None, platform_results=None):
+    """
+    Log one session entry. 1 session = 1 keyword + 1 proxy + all platforms.
+    """
     entry = {
         "timestamp":     datetime.utcnow().isoformat() + "Z",
         "date":          str(date.today()),
@@ -241,7 +270,6 @@ def log_session(client, keyword, platform, prompt, follow_up, device_id, status)
         "client_name":   client["biz_name"],
         "city":          client["city"],
         "keyword":       keyword,
-        "platform":      platform,
         "prompt":        prompt,
         "follow_up":     follow_up,
         "has_follow_up": follow_up is not None,
@@ -249,6 +277,23 @@ def log_session(client, keyword, platform, prompt, follow_up, device_id, status)
         "status":        status,
         "runner":        "appium",
     }
+
+    if proxy_info:
+        entry["proxy"] = {
+            "status":     proxy_info.get("status"),
+            "username":   proxy_info.get("username"),
+            "proxy_host": proxy_info.get("proxy_host"),
+            "proxy_port": proxy_info.get("proxy_port"),
+        }
+
+    if platform_results:
+        entry["platforms"] = {}
+        for pr in platform_results:
+            plat = pr.get("platform", "unknown")
+            entry["platforms"][plat] = {
+                "status": "success" if pr.get("success") else "error",
+                "steps":  pr.get("steps", []),
+            }
 
     with _log_lock:
         try:
@@ -343,12 +388,14 @@ def plan_sessions(max_clients=None):
                     "client":      client,
                     "keyword":     keyword,
                     "platform":    platform,
+                    "platforms":   list(PLATFORMS),
                     "device_id":   did,
                     "serial":      short_serial,
                     "full_serial": full_serial,
                     "port":        port,
                     "use_adb":     dev_info.get("use_adb", False),
                     "backlinks":   backlinks,
+                    "proxy":       client.get("proxy"),
                 })
 
                 device_clients_claimed[did].add(client["id"])
@@ -412,24 +459,39 @@ def run_daily(max_clients=None, test_mode=False):
                          sess["keyword"], sess["platform"])
 
     # Step 3: Print session plan
-    print(f"\n{'='*70}")
-    print(f"{'#':<3} {'Client':<25} {'Keyword':<28} {'Device':<12} {'Platform':<12} {'Port':<6} {'F/U'}")
-    print(f"{'-'*3} {'-'*25} {'-'*28} {'-'*12} {'-'*12} {'-'*6} {'-'*3}")
+    print(f"\n{'='*90}")
+    print(f"{'#':<3} {'Client':<25} {'Keyword':<28} {'Device':<12} {'Platforms':<14} {'Proxy'}")
+    print(f"{'-'*3} {'-'*25} {'-'*28} {'-'*12} {'-'*14} {'-'*8}")
     for i, s in enumerate(sessions):
-        fu = "Yes" if s.get("follow_up") else "No"
+        plats = ",".join(s.get("platforms", [s["platform"]]))
+        proxy_zip = s.get("proxy", {}).get("zip", "N/A") if s.get("proxy") else "OFF"
         print(f"{i+1:<3} {s['client']['biz_name']:<25} {s['keyword'][:28]:<28} "
-              f"{s['device_id']:<12} {s['platform']:<12} {s['port']:<6} {fu}")
-    print(f"{'='*70}")
+              f"{s['device_id']:<12} {plats:<14} {proxy_zip}")
+    print(f"{'='*90}")
 
     # Step 4: Launch all in parallel
     print(f"\nLaunching {len(sessions)} sessions in parallel...")
 
     def on_complete(sess, result):
         status = "success" if result.get("success") else "error"
+        proxy_info = result.get("proxy")
+        platform_results = result.get("platform_results", [])
         update_status(sess["device_id"], sess["client"]["id"], sess["keyword"], status)
-        log_session(sess["client"], sess["keyword"], sess["platform"],
-                    sess["prompt"], sess.get("follow_up"), sess["device_id"], status)
-        print(f"Logged: {sess['client']['biz_name']} | {sess['keyword'][:30]} | {status}")
+
+        log_session(
+            client=sess["client"],
+            keyword=sess["keyword"],
+            prompt=sess["prompt"],
+            follow_up=sess.get("follow_up"),
+            device_id=sess["device_id"],
+            status=status,
+            proxy_info=proxy_info,
+            platform_results=platform_results,
+        )
+
+        passed = sum(1 for r in platform_results if r.get("success"))
+        total = len(platform_results) or 1
+        print(f"Logged: {sess['client']['biz_name']} | {sess['keyword'][:30]} | {passed}/{total} platforms | {status}")
 
     results       = run_parallel(sessions, on_complete=on_complete)
     success_count = sum(1 for r in results if r.get("success"))
@@ -580,13 +642,15 @@ def main():
             return
         print(f"\nDRY RUN — {date.today()}")
         print(f"Devices: {len(DEVICE_POOL)} | Sessions: {len(sessions)}")
-        print(f"{'='*70}")
-        print(f"{'#':<3} {'Client':<25} {'Keyword':<28} {'Device':<12} {'Platform':<12} {'Port'}")
-        print(f"{'-'*3} {'-'*25} {'-'*28} {'-'*12} {'-'*12} {'-'*6}")
+        print(f"{'='*90}")
+        print(f"{'#':<3} {'Client':<25} {'Keyword':<28} {'Device':<12} {'Platforms':<14} {'Proxy'}")
+        print(f"{'-'*3} {'-'*25} {'-'*28} {'-'*12} {'-'*14} {'-'*8}")
         for i, s in enumerate(sessions):
+            plats = ",".join(s.get("platforms", [s["platform"]]))
+            proxy_zip = s.get("proxy", {}).get("zip", "N/A") if s.get("proxy") else "OFF"
             print(f"{i+1:<3} {s['client']['biz_name']:<25} {s['keyword'][:28]:<28} "
-                  f"{s['device_id']:<12} {s['platform']:<12} {s.get('port')}")
-        print(f"{'='*70}")
+                  f"{s['device_id']:<12} {plats:<14} {proxy_zip}")
+        print(f"{'='*90}")
     else:
         run_daily(max_clients=args.clients, test_mode=args.test)
 

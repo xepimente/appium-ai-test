@@ -19,6 +19,7 @@ from appium.options.android.uiautomator2.base import UiAutomator2Options
 
 from flows import clear_chrome, run_flow
 from flows_adb import run_flow_adb, clear_chrome as clear_chrome_adb
+from proxy import setup_device, teardown_device
 
 
 # ── Per-device locks (prevents ADB collisions on the same device) ──────────────
@@ -38,38 +39,21 @@ def _get_lock(device_id: str) -> threading.Lock:
 
 # ── Session Runner ─────────────────────────────────────────────────────────────
 
-def run_session(serial: str, full_serial: str, port: int,
-                platform: str, prompt: str, follow_up: Optional[str],
-                device_id: str, sess_meta: Optional[Dict] = None) -> Dict[str, Any]:
+def _run_single_platform(serial: str, full_serial: str, port: int,
+                         platform: str, prompt: str, follow_up: Optional[str],
+                         device_id: str, use_adb: bool,
+                         backlinks: List) -> Dict[str, Any]:
     """
-    Run one AEO session on a specific device.
-
-    Args:
-        serial:      Short device serial
-        full_serial: Full ADB transport name
-        port:        Appium server port for this device (from active_devices.json)
-        platform:    "Gemini", "ChatGPT", or "Perplexity"
-        prompt:      Seeding prompt text
-        follow_up:   Optional follow-up message
-        device_id:   e.g. "device-001"
-
-    Returns:
-        {"success": True/False, "device_id": ..., "output": ..., "steps": [...]}
+    Run one platform flow on a specific device.
+    Internal helper — does NOT manage proxy or locks.
     """
-    lock   = _get_lock(device_id)
     driver = None
-    use_adb = sess_meta.get("use_adb", False) if isinstance(sess_meta, dict) else False
-    backlinks = sess_meta.get("backlinks", []) if isinstance(sess_meta, dict) else []
-    lock.acquire()
-
     try:
         if use_adb:
-            # ── ADB-only mode (for Infinix and other incompatible devices) ──
             print(f"[{device_id}] ADB-only mode — {platform}")
             clear_chrome_adb(full_serial)
             time.sleep(1)
 
-            # Launch Chrome
             subprocess.run(
                 ["adb", "-s", full_serial, "shell", "am", "start", "-n",
                  "com.android.chrome/com.google.android.apps.chrome.Main"],
@@ -77,15 +61,13 @@ def run_session(serial: str, full_serial: str, port: int,
             )
             time.sleep(3)
 
-            result  = run_flow_adb(platform, full_serial, prompt, follow_up, backlinks=backlinks)
+            result = run_flow_adb(platform, full_serial, prompt, follow_up, backlinks=backlinks)
 
         else:
-            # ── Appium mode (default) ──
             print(f"[{device_id}] Clearing Chrome on {full_serial}...")
             clear_chrome(full_serial)
             time.sleep(1)
 
-            # Lock portrait BEFORE Appium connects
             subprocess.run(
                 ["adb", "-s", full_serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0"],
                 capture_output=True, timeout=5,
@@ -114,17 +96,106 @@ def run_session(serial: str, full_serial: str, port: int,
             driver = webdriver.Remote(appium_url, options=options)
             driver.implicitly_wait(5)
 
-            result  = run_flow(platform, driver, full_serial, prompt, follow_up, backlinks=backlinks)
+            result = run_flow(platform, driver, full_serial, prompt, follow_up, backlinks=backlinks)
 
         success = result.get("status") == "success"
         output  = f"steps={result.get('steps', [])} error={result.get('error', '')}"
 
-        print(f"[{device_id}] {'SUCCESS' if success else 'FAILED'} — {output}")
+        print(f"[{device_id}] {platform} {'SUCCESS' if success else 'FAILED'} — {output}")
         return {
             "success":   success,
             "device_id": device_id,
+            "platform":  platform,
             "output":    output,
             "steps":     result.get("steps", []),
+        }
+
+    except Exception as e:
+        err = f"{type(e).__name__}: {e}"
+        print(f"[{device_id}] {platform} ERROR — {err}")
+        traceback.print_exc()
+        return {
+            "success":   False,
+            "device_id": device_id,
+            "platform":  platform,
+            "output":    err,
+            "steps":     [],
+        }
+
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+
+def run_session(serial: str, full_serial: str, port: int,
+                platform: str, prompt: str, follow_up: Optional[str],
+                device_id: str, sess_meta: Optional[Dict] = None) -> Dict[str, Any]:
+    """
+    Run one AEO session on a specific device.
+
+    If sess_meta contains "platforms" (list), runs all platforms sequentially
+    under the same proxy session. Otherwise runs a single platform.
+
+    Proxy is connected before platforms and disconnected after all complete.
+
+    Returns:
+        {"success": True/False, "device_id": ..., "output": ..., "steps": [...],
+         "proxy": {...}, "platform_results": [...]}
+    """
+    lock    = _get_lock(device_id)
+    meta    = sess_meta if isinstance(sess_meta, dict) else {}
+    use_adb   = meta.get("use_adb", False)
+    backlinks = meta.get("backlinks", [])
+    proxy_config = meta.get("proxy", None)
+    platforms = meta.get("platforms", [platform])
+
+    lock.acquire()
+    proxy_info = None
+
+    try:
+        # ── Setup device: proxy + location + timezone ──
+        if proxy_config:
+            print(f"[{device_id}] Setting up device (proxy + location + timezone)...")
+            device_setup = setup_device(full_serial, proxy_config)
+            proxy_info = device_setup.get("proxy", {})
+            if proxy_info.get("status") != "CONNECTED":
+                print(f"[{device_id}] Proxy connection failed — continuing without proxy")
+            else:
+                time.sleep(3)  # Let VPN stabilize
+
+        # ── Run all platforms sequentially under same proxy ──
+        platform_results = []
+        all_steps = []
+
+        for plat in platforms:
+            print(f"\n[{device_id}] ── {plat} ──")
+            result = _run_single_platform(
+                serial=serial, full_serial=full_serial, port=port,
+                platform=plat, prompt=prompt, follow_up=follow_up,
+                device_id=device_id, use_adb=use_adb, backlinks=backlinks,
+            )
+            platform_results.append(result)
+            all_steps.extend(result.get("steps", []))
+
+            # Wait between platforms
+            if plat != platforms[-1]:
+                print(f"[{device_id}] Waiting 3s before next platform...")
+                time.sleep(3)
+
+        overall_success = all(r.get("success") for r in platform_results)
+        output = f"platforms={len(platforms)} passed={sum(1 for r in platform_results if r.get('success'))}"
+
+        print(f"[{device_id}] {'ALL PASSED' if overall_success else 'SOME FAILED'} — {output}")
+        return {
+            "success":          overall_success,
+            "device_id":        device_id,
+            "output":           output,
+            "steps":            all_steps,
+            "proxy":            proxy_info,
+            "platform_results": platform_results,
         }
 
     except Exception as e:
@@ -136,14 +207,17 @@ def run_session(serial: str, full_serial: str, port: int,
             "device_id": device_id,
             "output":    err,
             "steps":     [],
+            "proxy":     proxy_info,
         }
 
     finally:
-        if driver:
+        # ── Teardown: disconnect proxy ──
+        if proxy_config:
             try:
-                driver.quit()
-            except Exception:
-                pass
+                teardown_device(full_serial)
+            except Exception as e:
+                print(f"[{device_id}] Teardown error: {e}")
+
         lock.release()
         print(f"[{device_id}] Session done, lock released.")
 
@@ -184,7 +258,12 @@ def run_parallel(sessions: List[Dict], on_complete: Optional[Callable] = None) -
                 prompt      = sess["prompt"],
                 follow_up   = sess.get("follow_up"),
                 device_id   = sess["device_id"],
-                sess_meta   = {"use_adb": use_adb, "backlinks": sess.get("backlinks", [])},
+                sess_meta   = {
+                    "use_adb": use_adb,
+                    "backlinks": sess.get("backlinks", []),
+                    "proxy": sess.get("proxy"),
+                    "platforms": sess.get("platforms", [sess["platform"]]),
+                },
             )
 
         with results_lock:
