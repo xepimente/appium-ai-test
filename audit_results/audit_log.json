@@ -166,5 +166,71 @@
     "status": "success",
     "screenshot": "audit_results/Gemini/0_bilingual-childcare_20260325_014038.png",
     "response_text": "audit_results/text/0_bilingual-childcare_20260325_014038_Gemini.txt"
+  },
+  {
+    "timestamp": "2026-04-01 07:26:30",
+    "client_id": 0,
+    "biz_name": "Mae's Childcare",
+    "keyword": "bilingual childcare",
+    "platform": "Gemini",
+    "mode": "adb",
+    "device": "adb-149145555W006589-2W7yzb._adb-tls-connect._tcp",
+    "status": "success",
+    "screenshot": "audit_results/Gemini/0_bilingual-childcare_20260401_072423.png",
+    "response_text": "audit_results/text/0_bilingual-childcare_20260401_072423_Gemini.txt",
+    "duration_s": 127.3,
+    "proxy": {
+      "status": "CONNECTED",
+      "username": "user-spmtfc6iiw-session-nw7ehp6g-sessionduration-30-country-us-zip-94117",
+      "ip": "unknown",
+      "ip_city": null,
+      "ip_region": null,
+      "ip_country": null,
+      "ip_zip": null
+    }
+  },
+  {
+    "timestamp": "2026-04-01 07:27:35",
+    "client_id": 0,
+    "biz_name": "Mae's Childcare",
+    "keyword": "bilingual childcare",
+    "platform": "ChatGPT",
+    "mode": "adb",
+    "device": "adb-149145555W006589-2W7yzb._adb-tls-connect._tcp",
+    "status": "success",
+    "screenshot": "audit_results/ChatGPT/0_bilingual-childcare_20260401_072630.png",
+    "response_text": "audit_results/text/0_bilingual-childcare_20260401_072630_ChatGPT.txt",
+    "duration_s": 64.7,
+    "proxy": {
+      "status": "CONNECTED",
+      "username": "user-spmtfc6iiw-session-nw7ehp6g-sessionduration-30-country-us-zip-94117",
+      "ip": "unknown",
+      "ip_city": null,
+      "ip_region": null,
+      "ip_country": null,
+      "ip_zip": null
+    }
+  },
+  {
+    "timestamp": "2026-04-01 07:29:38",
+    "client_id": 0,
+    "biz_name": "Mae's Childcare",
+    "keyword": "bilingual childcare",
+    "platform": "Perplexity",
+    "mode": "adb",
+    "device": "adb-149145555W006589-2W7yzb._adb-tls-connect._tcp",
+    "status": "success",
+    "screenshot": "audit_results/Perplexity/0_bilingual-childcare_20260401_072735.png",
+    "response_text": "audit_results/text/0_bilingual-childcare_20260401_072735_Perplexity.txt",
+    "duration_s": 123.3,
+    "proxy": {
+      "status": "CONNECTED",
+      "username": "user-spmtfc6iiw-session-nw7ehp6g-sessionduration-30-country-us-zip-94117",
+      "ip": "unknown",
+      "ip_city": null,
+      "ip_region": null,
+      "ip_country": null,
+      "ip_zip": null
+    }
   }
 ]

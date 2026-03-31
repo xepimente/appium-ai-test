@@ -172,7 +172,7 @@ def run_session(serial: str, full_serial: str, port: int,
             if proxy_info.get("status") != "CONNECTED":
                 print(f"[{device_id}] Proxy connection failed — continuing without proxy")
             else:
-                time.sleep(3)  # Let VPN stabilize
+                time.sleep(5)  # Let VPN stabilize
 
         # ── Run all platforms sequentially under same proxy ──
         platform_results = []

@@ -41,9 +41,9 @@ PLATFORMS = ["Gemini", "ChatGPT", "Perplexity"]
 # Concise prompt — forces a short response that fits in 1 mobile screen
 AUDIT_PROMPT_TEMPLATE = (
     "Top 3 businesses for {keyword} in {city}, {state}. "
-    "Format: numbered list, each line: name - one short reason - Google Maps (yes/no). "
-    "No intro, no bullet points, no extra detail. "
-    "After the list, one sentence: is {biz_name} ({biz_url}) a leader? "
+    "Format: numbered list, each entry: name, 2-3 sentence description of why they stand out, "
+    "and whether they appear on Google Maps (yes/no). "
+    "After the list, a short paragraph: is {biz_name} ({biz_url}) a leader in this space? "
     "Keep entire response under 100 words."
 )
 
@@ -84,7 +84,8 @@ def save_log(entries):
         json.dump(entries, f, indent=2)
 
 
-def log_entry(client, keyword, platform, mode, device, status, screenshot_path, text_path, error=None):
+def log_entry(client, keyword, platform, mode, device, status, screenshot_path, text_path,
+              error=None, proxy_info=None, duration_s=None):
     """Add an entry to the audit log."""
     entries = load_log()
     entry = {
@@ -101,6 +102,18 @@ def log_entry(client, keyword, platform, mode, device, status, screenshot_path, 
     }
     if error:
         entry["error"] = error
+    if duration_s is not None:
+        entry["duration_s"] = duration_s
+    if proxy_info:
+        entry["proxy"] = {
+            "status":     proxy_info.get("status"),
+            "username":   proxy_info.get("username"),
+            "ip":         proxy_info.get("ip"),
+            "ip_city":    proxy_info.get("ip_city"),
+            "ip_region":  proxy_info.get("ip_region"),
+            "ip_country": proxy_info.get("ip_country"),
+            "ip_zip":     proxy_info.get("ip_zip"),
+        }
     entries.append(entry)
     save_log(entries)
     return entry
@@ -112,6 +125,7 @@ from flows_adb import (
     adb, clear_chrome, dismiss_chrome_fre, navigate_to_url as adb_navigate,
     type_text, find_and_tap, wait_for_generation as adb_wait_gen,
     tap, dump_ui, hide_keyboard, get_screen_size as adb_screen_size,
+    wait_for_page_ready,
 )
 
 
@@ -193,18 +207,37 @@ def _dismiss_gemini_popups(serial):
     dismiss_gemini_banner_adb(serial)
 
 
-def audit_gemini_adb(serial, client, keyword, prompt, cdp_port=9222):
+def audit_gemini_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=True):
     """Run Gemini audit via ADB."""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     ss_path, text_path = make_paths(client, keyword, "Gemini", timestamp)
 
-    clear_chrome(serial)
-    time.sleep(1)
-    adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
-        "-d", "https://gemini.google.com", "com.android.chrome")
-    time.sleep(5)
+    if is_first:
+        clear_chrome(serial)
+        time.sleep(1)
+        # Launch Chrome and type URL in address bar
+        adb(serial, "shell", "am", "start", "-n",
+            "com.android.chrome/com.google.android.apps.chrome.Main")
+        time.sleep(3)
+        _dismiss_gemini_popups(serial)
+        from flows_adb import find_and_tap as adb_find_tap, press_enter
+        if not adb_find_tap(serial, resource_id="search_box_text"):
+            adb_find_tap(serial, resource_id="url_bar")
+        time.sleep(1)
+        adb(serial, "shell", "input", "text", "gemini.google.com", timeout=10)
+        time.sleep(0.3)
+        press_enter(serial)
+    else:
+        adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
+            "-d", "https://gemini.google.com", "com.android.chrome")
 
-    _dismiss_gemini_popups(serial)
+    wait_for_page_ready(serial, platform="gemini")
+
+    if is_first:
+        # Dismiss Gemini-specific popups after page loads
+        find_and_tap(serial, text="No thanks")
+        time.sleep(1)
+        dismiss_gemini_banner_adb(serial)
 
     # Type + send
     w, h = adb_screen_size(serial)
@@ -234,19 +267,22 @@ def audit_gemini_adb(serial, client, keyword, prompt, cdp_port=9222):
     return ss_path, text_path, timestamp
 
 
-def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222):
+def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=True):
     """Run ChatGPT audit via ADB."""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     ss_path, text_path = make_paths(client, keyword, "ChatGPT", timestamp)
 
-    clear_chrome(serial)
-    time.sleep(1)
+    if is_first:
+        clear_chrome(serial)
+        time.sleep(1)
+
     adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
         "-d", "https://chatgpt.com", "com.android.chrome")
-    time.sleep(5)
+    wait_for_page_ready(serial, platform="chatgpt")
 
-    dismiss_chrome_fre(serial)
-    time.sleep(8)
+    if is_first:
+        dismiss_chrome_fre(serial)
+    time.sleep(3)
 
     # Type + send
     w, h = adb_screen_size(serial)
@@ -276,19 +312,22 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222):
     return ss_path, text_path, timestamp
 
 
-def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222):
+def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=True):
     """Run Perplexity audit via ADB."""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     ss_path, text_path = make_paths(client, keyword, "Perplexity", timestamp)
 
-    clear_chrome(serial)
-    time.sleep(1)
+    if is_first:
+        clear_chrome(serial)
+        time.sleep(1)
+
     adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
         "-d", "https://www.perplexity.ai", "com.android.chrome")
-    time.sleep(5)
+    wait_for_page_ready(serial, platform="perplexity")
 
-    dismiss_chrome_fre(serial)
-    time.sleep(5)
+    if is_first:
+        dismiss_chrome_fre(serial)
+    time.sleep(2)
     dismiss_perplexity_comet_adb(serial)
 
     # Type + send
@@ -301,9 +340,25 @@ def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222):
     time.sleep(1)
 
     # Perplexity needs keyboard hide + submit poll
-    from flows_adb import hide_keyboard_and_submit
+    from flows_adb import hide_keyboard_and_submit, find_and_tap as adb_find_tap
     hide_keyboard_and_submit(serial)
-    time.sleep(2)
+    time.sleep(3)
+
+    # Verify submit worked — if no generation started, retry
+    xml = dump_ui(serial)
+    has_stop = any(p in xml for p in ["Stop streaming", "Stop generating", "Stop response"])
+    if not has_stop:
+        print("    Submit may not have worked — retrying...")
+        # Try tapping Submit again
+        hide_keyboard_and_submit(serial)
+        time.sleep(2)
+        # Last resort: press Enter
+        xml = dump_ui(serial)
+        has_stop = any(p in xml for p in ["Stop streaming", "Stop generating", "Stop response"])
+        if not has_stop:
+            print("    Pressing Enter as fallback...")
+            adb(serial, "shell", "input", "keyevent", "66", timeout=5)
+            time.sleep(2)
 
     adb_wait_gen(serial)
     time.sleep(3)
@@ -517,7 +572,8 @@ ADB_AUDIT_FLOWS = {
 
 # ── Main Runner ──────────────────────────────────────────────────────────────
 
-def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port=9222):
+def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port=9222,
+              proxy_info=None, is_first=True):
     """
     Run a single audit: send ranking prompt, capture screenshot + text.
 
@@ -529,6 +585,7 @@ def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port
         mode: "adb" or "appium"
         port: Appium port (only for appium mode)
         cdp_port: Chrome DevTools port (unique per device in parallel)
+        proxy_info: proxy connection info (passed from caller, not managed here)
 
     Returns:
         dict with status, screenshot, text, timestamp
@@ -541,30 +598,36 @@ def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port
     print(f"Device: {serial[:40]}...")
     print(f"{'='*60}")
 
+    start_time = time.time()
+
     try:
         if mode == "adb":
             flow_fn = ADB_AUDIT_FLOWS.get(platform)
             if not flow_fn:
                 raise ValueError(f"Unknown platform: {platform}")
-            ss_path, text_path, timestamp = flow_fn(serial, client, keyword, prompt, cdp_port=cdp_port)
+            ss_path, text_path, timestamp = flow_fn(serial, client, keyword, prompt, cdp_port=cdp_port, is_first=is_first)
         else:
             ss_path, text_path, timestamp = audit_platform_appium(
                 serial, client, keyword, prompt, platform, port
             )
 
+        duration = round(time.time() - start_time, 1)
         entry = log_entry(client, keyword, platform, mode, serial,
-                          "success", ss_path, text_path)
+                          "success", ss_path, text_path,
+                          proxy_info=proxy_info, duration_s=duration)
         print(f"\n  Screenshot: {ss_path}")
         print(f"  Text: {text_path}")
-        print(f"  Status: SUCCESS")
+        print(f"  Status: SUCCESS ({duration}s)")
         return {"status": "success", "screenshot": ss_path, "text": text_path,
                 "timestamp": timestamp}
 
     except Exception as e:
         error_msg = f"{type(e).__name__}: {e}"
+        duration = round(time.time() - start_time, 1)
         print(f"\n  ERROR: {error_msg}")
         log_entry(client, keyword, platform, mode, serial,
-                  "error", "", "", error=error_msg)
+                  "error", "", "", error=error_msg,
+                  proxy_info=proxy_info, duration_s=duration)
         return {"status": "error", "error": error_msg}
 
 
@@ -577,6 +640,14 @@ TEST_CLIENT = {
     "city": "San Francisco",
     "state": "California",
     "keywords": ["bilingual childcare"],
+    "proxy": {
+        "session_duration": 30,
+        "country": "us",
+        "zip": "94117",
+        "latitude": 37.77784,
+        "longitude": -122.430147,
+        "timezone": "America/Los_Angeles"
+    },
 }
 
 
@@ -641,13 +712,13 @@ def main():
             ).stdout.strip()
             device_info.append({"serial": serial, "brand": brand, "model": model})
 
-        # Build all keyword jobs: (client, keyword, random_platform)
+        # Build all keyword jobs: each keyword runs all 3 platforms (1 session)
         jobs = []
         for client in clients:
             for kw in client.get("keywords", []):
                 keyword = kw["keyword"] if isinstance(kw, dict) else kw
-                platform = args.platform if args.platform else random.choice(PLATFORMS)
-                jobs.append({"client": client, "keyword": keyword, "platform": platform})
+                plats = [args.platform] if args.platform else list(PLATFORMS)
+                jobs.append({"client": client, "keyword": keyword, "platforms": plats})
 
         # Distribute jobs round-robin across devices
         # Each device gets a queue of jobs to run sequentially
@@ -678,20 +749,53 @@ def main():
         results_lock = threading.Lock()
 
         def device_worker(dev_idx, dev, queue, cdp_port):
-            """Run all assigned jobs sequentially on one device."""
-            for job in queue:
-                print(f"\n[{dev['brand']} {dev['model']}] {job['platform']} — "
-                      f"{job['client']['biz_name']} | {job['keyword'][:30]}")
-                r = run_audit(
-                    client=job["client"],
-                    keyword=job["keyword"],
-                    platform=job["platform"],
-                    serial=dev["serial"],
-                    mode="adb",
-                    cdp_port=cdp_port,
-                )
-                with results_lock:
-                    all_results.append(r)
+            """Run all assigned jobs sequentially on one device.
+            Each job = 1 keyword × all 3 platforms under same proxy session.
+            Proxy reconnects per keyword (new session ID = new IP)."""
+            from proxy import setup_device, teardown_device
+
+            for job_idx, job in enumerate(queue):
+                client = job["client"]
+                proxy_config = client.get("proxy")
+                proxy_info = None
+
+                # Setup proxy per keyword (new session ID = new IP)
+                if proxy_config:
+                    if job_idx > 0:
+                        try:
+                            teardown_device(dev["serial"])
+                        except Exception:
+                            pass
+                        time.sleep(2)
+
+                    print(f"\n[{dev['brand']}] Setting up proxy for {client['biz_name']} | {job['keyword'][:30]}...")
+                    device_setup = setup_device(dev["serial"], proxy_config)
+                    proxy_info = device_setup.get("proxy", {})
+                    time.sleep(3)
+
+                # Run all platforms for this keyword under same proxy
+                for plat_idx, plat in enumerate(job["platforms"]):
+                    print(f"\n[{dev['brand']} {dev['model']}] {plat} — "
+                          f"{client['biz_name']} | {job['keyword'][:30]}")
+                    r = run_audit(
+                        client=client,
+                        keyword=job["keyword"],
+                        platform=plat,
+                        serial=dev["serial"],
+                        mode="adb",
+                        cdp_port=cdp_port,
+                        proxy_info=proxy_info,
+                        is_first=(job_idx == 0 and plat_idx == 0),
+                    )
+                    with results_lock:
+                        all_results.append(r)
+
+            # Final teardown
+            if queue:
+                try:
+                    teardown_device(dev["serial"])
+                except Exception:
+                    pass
 
         # Start one thread per device — each runs its queue sequentially
         threads = []
@@ -740,16 +844,40 @@ def main():
     print(f"Platforms: {', '.join(platforms)}")
     print(f"Clients: {len(clients)}")
 
+    from proxy import setup_device, teardown_device
+
     results = []
+    is_first_job = True
+    is_first_platform = True
+
     for client in clients:
         raw_kws = client.get("keywords", [])
         if not raw_kws:
             continue
 
+        proxy_config = client.get("proxy")
+
         kw_idx = min(args.keyword_index, len(raw_kws) - 1)
         kw_entry = raw_kws[kw_idx]
         keyword = kw_entry["keyword"] if isinstance(kw_entry, dict) else kw_entry
+        proxy_info = None
 
+        # Setup proxy per keyword (new session ID = new IP)
+        if proxy_config:
+            if not is_first_job:
+                try:
+                    teardown_device(args.serial)
+                except Exception:
+                    pass
+                time.sleep(2)
+
+            print(f"\nSetting up proxy for {client['biz_name']} | {keyword[:30]}...")
+            device_setup = setup_device(args.serial, proxy_config)
+            proxy_info = device_setup.get("proxy", {})
+            time.sleep(3)
+            is_first_job = False
+
+        # Run all platforms for this keyword under same proxy
         for platform in platforms:
             result = run_audit(
                 client=client,
@@ -758,8 +886,18 @@ def main():
                 serial=args.serial,
                 mode=args.mode,
                 port=args.port,
+                proxy_info=proxy_info,
+                is_first=is_first_platform,
             )
             results.append(result)
+            is_first_platform = False
+
+    # Final teardown
+    if not is_first_job:
+        try:
+            teardown_device(args.serial)
+        except Exception:
+            pass
 
     success = sum(1 for r in results if r["status"] == "success")
     failed = sum(1 for r in results if r["status"] == "error")

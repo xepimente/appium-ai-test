@@ -140,14 +140,73 @@ def dismiss_chrome_fre(serial):
     print("  FRE complete")
 
 
-def navigate_to_url(serial, url):
+def wait_for_page_ready(serial, platform=None, max_wait=45, url=None):
+    """
+    Wait until the page is fully loaded by checking for platform-specific elements.
+    If 'site can't be reached' is detected, reloads the page automatically.
+    """
+    ready_indicators = {
+        "gemini": ["Send message", "Ask Gemini"],
+        "chatgpt": ["Ask anything", "prompt-textarea", "Send prompt"],
+        "perplexity": ["Ask anything", "ask-input"],
+    }
+
+    platform_key = (platform or "").lower().replace("www.", "")
+    indicators = ready_indicators.get(platform_key, [])
+
+    if not indicators:
+        time.sleep(8)
+        return
+
+    start = time.time()
+    retries = 0
+    max_retries = 2
+
+    while time.time() - start < max_wait:
+        xml = dump_ui(serial)
+
+        # Check for page load error — reload if found
+        if "site can" in xml.lower() or "ERR_" in xml or "net::ERR" in xml:
+            retries += 1
+            elapsed = int(time.time() - start)
+            if retries <= max_retries:
+                print(f"  Page load error detected ({elapsed}s) — reloading (retry {retries}/{max_retries})...")
+                time.sleep(2)
+                # Tap Reload button if visible
+                if not find_and_tap(serial, text="Reload"):
+                    # Fallback: re-navigate
+                    if url:
+                        full_url = url if url.startswith("http") else f"https://{url}"
+                        adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
+                            "-d", full_url, CHROME_PACKAGE, timeout=10)
+                time.sleep(3)
+                continue
+            else:
+                print(f"  Page failed after {max_retries} retries — proceeding anyway")
+                return
+
+        # Check for ready indicators
+        for indicator in indicators:
+            if indicator in xml:
+                elapsed = int(time.time() - start)
+                print(f"  Page ready ({elapsed}s) — found '{indicator}'")
+                time.sleep(1)
+                return
+
+        time.sleep(2)
+
+    elapsed = int(time.time() - start)
+    print(f"  Page load timeout ({elapsed}s) — proceeding anyway")
+
+
+def navigate_to_url(serial, url, platform=None):
     """Navigate Chrome to a URL using am start intent (works from any page state)."""
     print(f"  Navigating to {url}...")
     full_url = url if url.startswith("http") else f"https://{url}"
     adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
         "-d", full_url, CHROME_PACKAGE, timeout=10)
     print("  Waiting for page to load...")
-    time.sleep(8)
+    wait_for_page_ready(serial, platform, url=url)
 
 
 # ── Text Input ────────────────────────────────────────────────────────────────
@@ -555,7 +614,16 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     dismiss_chrome_fre(serial)
     steps.append("dismissed_fre")
 
-    navigate_to_url(serial, "gemini.google.com")
+    # Gemini: type URL in address bar (not am start intent)
+    print("  Navigating to gemini.google.com...")
+    if not find_and_tap(serial, resource_id="search_box_text"):
+        find_and_tap(serial, resource_id="url_bar")
+    time.sleep(1)
+    adb(serial, "shell", "input", "text", "gemini.google.com", timeout=10)
+    time.sleep(0.3)
+    press_enter(serial)
+    print("  Waiting for page to load...")
+    wait_for_page_ready(serial, platform="gemini")
     steps.append("navigated")
 
     time.sleep(2)
@@ -626,7 +694,7 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
     # dismiss_chrome_fre(serial)
     # steps.append("dismissed_fre")
 
-    navigate_to_url(serial, "chatgpt.com")
+    navigate_to_url(serial, "chatgpt.com", platform="chatgpt")
     steps.append("navigated")
 
     time.sleep(5)
@@ -689,7 +757,7 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     # dismiss_chrome_fre(serial)
     # steps.append("dismissed_fre")
 
-    navigate_to_url(serial, "www.perplexity.ai")
+    navigate_to_url(serial, "www.perplexity.ai", platform="perplexity")
     steps.append("navigated")
 
     # Dismiss Comet modals by tapping X

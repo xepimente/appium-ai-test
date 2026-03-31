@@ -145,14 +145,16 @@ def dismiss_first_run_dialogs(driver):
     time.sleep(0.5)
 
 
-def navigate_to_url(driver, url):
+def navigate_to_url(driver, url, platform=None):
     """
     Navigate Chrome to a URL using ADB intent (works from any page state).
+    Waits for platform-specific elements to confirm page is ready.
     Must be in NATIVE_APP context.
     """
     import subprocess
+    from flows_adb import wait_for_page_ready
+
     full_url = url if url.startswith("http") else f"https://{url}"
-    # Get device serial from driver capabilities
     serial = driver.capabilities.get("udid", "")
     if serial:
         subprocess.run(
@@ -162,13 +164,16 @@ def navigate_to_url(driver, url):
             capture_output=True, timeout=10,
         )
     else:
-        # Fallback: use driver to start activity
         driver.execute_script("mobile: shell", {
             "command": "am",
             "args": ["start", "-a", "android.intent.action.VIEW", "-d", full_url,
                      "com.android.chrome"],
         })
-    time.sleep(5)
+
+    if serial and platform:
+        wait_for_page_ready(serial, platform, url=url)
+    else:
+        time.sleep(8)
 
 
 # ── Wait for AI Generation ─────────────────────────────────────────────────────
@@ -329,7 +334,7 @@ def run_gemini(driver, serial, prompt, follow_up=None, backlinks=None):
     dismiss_first_run_dialogs(driver)
     steps.append("dismissed_first_run")
 
-    navigate_to_url(driver, "gemini.google.com")
+    navigate_to_url(driver, "gemini.google.com", platform="gemini")
     steps.append("navigated_to_gemini")
 
     # Dismiss optional popup in native context
@@ -425,7 +430,7 @@ def run_chatgpt(driver, serial, prompt, follow_up=None, backlinks=None):
     # dismiss_first_run_dialogs(driver)
     # steps.append("dismissed_first_run")
 
-    navigate_to_url(driver, "chatgpt.com")
+    navigate_to_url(driver, "chatgpt.com", platform="chatgpt")
     steps.append("navigated_to_chatgpt")
 
     # ── Switch to WebView (ChatGPT needs ~10s to load) ──
@@ -516,7 +521,7 @@ def run_perplexity(driver, serial, prompt, follow_up=None, backlinks=None):
     # dismiss_first_run_dialogs(driver)
     # steps.append("dismissed_first_run")
 
-    navigate_to_url(driver, "www.perplexity.ai")
+    navigate_to_url(driver, "www.perplexity.ai", platform="perplexity")
     steps.append("navigated_to_perplexity")
 
     # Dismiss Comet promo modals + login wall (native)

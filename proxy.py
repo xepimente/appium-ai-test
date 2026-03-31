@@ -300,9 +300,33 @@ def set_timezone(serial: str, timezone: str,
         return {"status": "ERROR", "error": str(e)}
 
 
+def randomize_location(latitude: float, longitude: float,
+                       radius_miles: float = 5.0) -> tuple:
+    """
+    Randomize lat/lng within a radius (in miles) of the center point.
+    Returns (new_lat, new_lng).
+
+    1 degree latitude ≈ 69 miles
+    1 degree longitude ≈ 69 * cos(lat) miles
+    """
+    import math
+
+    radius_deg_lat = radius_miles / 69.0
+    radius_deg_lng = radius_miles / (69.0 * math.cos(math.radians(latitude)))
+
+    # Random point within circle
+    angle = random.uniform(0, 2 * math.pi)
+    distance = random.uniform(0, 1) ** 0.5  # sqrt for uniform distribution in circle
+    offset_lat = distance * radius_deg_lat * math.sin(angle)
+    offset_lng = distance * radius_deg_lng * math.cos(angle)
+
+    return round(latitude + offset_lat, 6), round(longitude + offset_lng, 6)
+
+
 def setup_device(serial: str, proxy_config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Full device setup for a session: proxy + location + timezone.
+    Location is randomized within 5 miles of the base coordinates.
     Returns combined result with proxy, location, timezone status.
     """
     result = {}
@@ -311,11 +335,13 @@ def setup_device(serial: str, proxy_config: Dict[str, Any]) -> Dict[str, Any]:
     proxy_info = connect_proxy(serial, proxy_config)
     result["proxy"] = proxy_info
 
-    # 2. Set mock location (if configured)
+    # 2. Set mock location — randomized within 5 miles
     lat = proxy_config.get("latitude")
     lng = proxy_config.get("longitude")
     if lat is not None and lng is not None:
-        result["location"] = set_location(serial, lat, lng)
+        rand_lat, rand_lng = randomize_location(lat, lng, radius_miles=5.0)
+        print(f"  [Location] Randomized: ({lat}, {lng}) → ({rand_lat}, {rand_lng})")
+        result["location"] = set_location(serial, rand_lat, rand_lng)
 
     # 3. Set timezone (if configured)
     tz = proxy_config.get("timezone")
