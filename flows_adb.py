@@ -226,46 +226,31 @@ def type_text(serial, text):
 
 
 def hide_keyboard_and_submit(serial):
-    """Hide keyboard, wait until Submit is at correct position, then tap it."""
-    w, h = get_screen_size(serial)
-
-    # First check if Submit/arrow is already visible without keyboard
+    """Find Submit button and tap it. If not found, hide keyboard and retry."""
+    # Tap Submit wherever it is — don't wait for specific position
     result = find_element(serial, text="Submit") or find_element(serial, content_desc="Submit")
     if result:
         cx, cy, _, _ = result
-        # If Submit is in the top half, keyboard is not showing — tap directly
-        if cy < h * 0.5:
-            print(f"    Submit visible at ({cx},{cy}) — tapping directly")
-            tap(serial, cx, cy)
-            time.sleep(1)
-            return
+        print(f"    Submit found at ({cx},{cy}) — tapping")
+        tap(serial, cx, cy)
+        time.sleep(1)
+        return
 
+    # Not found — hide keyboard and retry
     print("  Hiding keyboard...")
     hide_keyboard(serial)
-    print("  Waiting for Submit to be ready...")
-    for attempt in range(15):
+    print("  Waiting for Submit...")
+    for attempt in range(10):
         result = find_element(serial, text="Submit") or find_element(serial, content_desc="Submit")
         if result:
             cx, cy, _, _ = result
-            if cy > 1400:
-                print(f"    Submit ready at ({cx},{cy}) — tapping")
-                tap(serial, cx, cy)
-                time.sleep(1)
-                return
-            elif cy < h * 0.5:
-                # No keyboard layout — submit is inline with input
-                print(f"    Submit inline at ({cx},{cy}) — tapping")
-                tap(serial, cx, cy)
-                time.sleep(1)
-                return
-            else:
-                print(f"    Submit at ({cx},{cy}) — keyboard still hiding... ({attempt+1}s)")
-                time.sleep(1)
-        else:
-            print(f"    Submit not found yet... ({attempt+1}s)")
+            print(f"    Submit ready at ({cx},{cy}) — tapping")
+            tap(serial, cx, cy)
             time.sleep(1)
-    print("    Fallback: tapping (638, 1494)")
-    tap(serial, 638, 1494)
+            return
+        time.sleep(1)
+    print("    Fallback: pressing Enter")
+    press_enter(serial)
     time.sleep(1)
 
 
@@ -630,10 +615,11 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     find_and_tap(serial, text="No thanks")
     time.sleep(1)
 
-    # Tap input area
+    # Tap input area — find "Ask Gemini" element to avoid hitting mic icon
     print("  Tapping input area...")
+    if not find_and_tap(serial, text="Ask Gemini"):
+        tap(serial, w // 2, int(h * 0.75))
     input_y = int(h * 0.85)
-    tap(serial, w // 2, input_y)
     time.sleep(1)
 
     print(f"  Typing prompt ({len(prompt)} chars)...")

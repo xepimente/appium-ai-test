@@ -44,7 +44,7 @@ AUDIT_PROMPT_TEMPLATE = (
     "Format: numbered list, each entry: name, 2-3 sentence description of why they stand out, "
     "and whether they appear on Google Maps (yes/no). "
     "After the list, a short paragraph: is {biz_name} ({biz_url}) a leader in this space? "
-    "Keep entire response under 100 words."
+    "Keep entire response under 150 words."
 )
 
 # Platform URLs
@@ -127,6 +127,37 @@ from flows_adb import (
     tap, dump_ui, hide_keyboard, get_screen_size as adb_screen_size,
     wait_for_page_ready,
 )
+
+
+# ── Pre-Screenshot Helpers ───────────────────────────────────────────────────
+
+def _cleanup_before_screenshot(serial, cdp_port=9222, cleanup_js="", use_css_font=False):
+    """Run cleanup JS and set zoom via CDP right before screenshot."""
+    try:
+        from screenshot import cdp_connect, cdp_disconnect, cdp_eval
+        import json as _json
+        ws = cdp_connect(serial, local_port=cdp_port)
+        if ws:
+            if cleanup_js:
+                cdp_eval(ws, cleanup_js)
+            if use_css_font:
+                # CSS font resize — for platforms where setPageScaleFactor doesn't work
+                cdp_eval(ws, """
+                    document.querySelectorAll('*').forEach(function(el) {
+                        var style = window.getComputedStyle(el);
+                        var size = parseFloat(style.fontSize);
+                        if (size > 12) {
+                            el.style.fontSize = (size * 0.75) + 'px';
+                            el.style.lineHeight = '1.3';
+                        }
+                    });
+                """)
+            else:
+                cdp_eval(ws, "document.body.style.zoom = '0.75'")
+            cdp_disconnect(serial, ws, local_port=cdp_port)
+            time.sleep(1)
+    except Exception:
+        pass
 
 
 # ── Banner Dismissal ─────────────────────────────────────────────────────────
@@ -239,9 +270,10 @@ def audit_gemini_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=Tr
         time.sleep(1)
         dismiss_gemini_banner_adb(serial)
 
-    # Type + send
+    # Type + send — find "Ask Gemini" element to avoid hitting mic icon
     w, h = adb_screen_size(serial)
-    tap(serial, w // 2, int(h * 0.85))
+    if not find_and_tap(serial, text="Ask Gemini"):
+        tap(serial, w // 2, int(h * 0.75))
     time.sleep(1)
     type_text(serial, prompt)
     time.sleep(1)
@@ -254,9 +286,15 @@ def audit_gemini_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=Tr
     dismiss_gemini_banner_adb(serial)
     time.sleep(1)
 
-    # Screenshot
+    # Screenshot — scroll first, then remove banner + zoom right before capture
     scroll_response_to_top(serial, "Gemini", local_port=cdp_port)
-    time.sleep(1)
+    _cleanup_before_screenshot(serial, cdp_port, """
+        document.querySelectorAll('div, section').forEach(function(el) {
+            var text = el.textContent || '';
+            if ((text.indexOf('Chat with Gemini in an app') > -1 || text.indexOf('Try app') > -1)
+                && el.offsetHeight < 200) { el.remove(); }
+        });
+    """)
     take_screenshot(serial, output_path=ss_path)
 
     # Text
@@ -299,7 +337,26 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=T
     adb_wait_gen(serial)
     time.sleep(3)
 
-    # Screenshot
+    # Dismiss ChatGPT Terms popup via ADB (X button) before screenshot
+    find_and_tap(serial, content_desc="Close") or find_and_tap(serial, content_desc="Dismiss")
+    time.sleep(1)
+
+    # Dismiss popup + resize font, then scroll to top, then screenshot
+    _cleanup_before_screenshot(serial, cdp_port, """
+        document.querySelectorAll('button').forEach(function(btn) {
+            var svg = btn.querySelector('svg');
+            var parent = btn.closest('div');
+            if (svg && parent && parent.textContent.indexOf('Privacy Policy') > -1) btn.click();
+            var label = btn.getAttribute('aria-label') || '';
+            if (label === 'Close' || label === 'Dismiss') btn.click();
+        });
+        document.querySelectorAll('div').forEach(function(el) {
+            var text = el.textContent || '';
+            if (text.indexOf('Privacy Policy') > -1 && text.indexOf('Don\\'t share') > -1
+                && el.offsetHeight < 300) { el.remove(); }
+        });
+    """, use_css_font=True)
+    # Scroll AFTER font resize so position is correct
     scroll_response_to_top(serial, "ChatGPT", local_port=cdp_port)
     time.sleep(1)
     take_screenshot(serial, output_path=ss_path)
@@ -363,9 +420,13 @@ def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222, is_firs
     adb_wait_gen(serial)
     time.sleep(3)
 
-    # Screenshot
+    # Screenshot — scroll first, then remove banner + zoom right before capture
     scroll_response_to_top(serial, "Perplexity", local_port=cdp_port)
-    time.sleep(1)
+    _cleanup_before_screenshot(serial, cdp_port, """
+        document.querySelectorAll('div, a, button').forEach(function(el) {
+            if (el.textContent.trim() === 'Open in App') el.remove();
+        });
+    """)
     take_screenshot(serial, output_path=ss_path)
 
     # Text
@@ -740,7 +801,7 @@ def main():
             d = device_info[dev_idx]
             print(f"  {d['brand']} {d['model']}: {len(queue)} keywords")
             for j in queue[:3]:
-                print(f"    {j['client']['biz_name']} | {j['keyword'][:30]} | {j['platform']}")
+                print(f"    {j['client']['biz_name']} | {j['keyword'][:30]} | {','.join(j.get('platforms', []))}")
             if len(queue) > 3:
                 print(f"    ... and {len(queue) - 3} more")
         print(f"{'='*60}")
