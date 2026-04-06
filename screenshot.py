@@ -168,7 +168,7 @@ SCROLL_RESPONSE_JS = {
             }
             if (el) {
                 el.scrollIntoView({behavior: 'instant', block: 'start'});
-                window.scrollBy(0, -60);
+                window.scrollBy(0, -120);
                 return true;
             }
             return false;

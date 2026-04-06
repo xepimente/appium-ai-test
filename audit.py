@@ -125,7 +125,7 @@ from flows_adb import (
     adb, clear_chrome, dismiss_chrome_fre, navigate_to_url as adb_navigate,
     type_text, find_and_tap, wait_for_generation as adb_wait_gen,
     tap, dump_ui, hide_keyboard, get_screen_size as adb_screen_size,
-    wait_for_page_ready,
+    wait_for_page_ready, keep_screen_on,
 )
 
 
@@ -316,10 +316,11 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=T
 
     adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
         "-d", "https://chatgpt.com", "com.android.chrome")
-    wait_for_page_ready(serial, platform="chatgpt")
 
     if is_first:
         dismiss_chrome_fre(serial)
+
+    wait_for_page_ready(serial, platform="chatgpt")
     time.sleep(3)
 
     # Type + send
@@ -380,36 +381,83 @@ def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222, is_firs
 
     adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
         "-d", "https://www.perplexity.ai", "com.android.chrome")
-    wait_for_page_ready(serial, platform="perplexity")
 
     if is_first:
         dismiss_chrome_fre(serial)
+
+    wait_for_page_ready(serial, platform="perplexity")
     time.sleep(2)
     dismiss_perplexity_comet_adb(serial)
 
-    # Type + send
-    if not find_and_tap(serial, resource_id="ask-input"):
-        if not find_and_tap(serial, text="Ask anything"):
-            w, h = adb_screen_size(serial)
-            tap(serial, w // 2, int(h * 0.6))
-    time.sleep(1)
+    # Type + send — try CDP focus first, then ADB tap fallback
+    w, h = adb_screen_size(serial)
+    cdp_focused = False
+    try:
+        from screenshot import cdp_connect, cdp_eval, cdp_disconnect
+        ws = cdp_connect(serial, local_port=cdp_port)
+        if ws:
+            cdp_eval(ws, """
+                var input = document.querySelector('textarea[placeholder]')
+                    || document.querySelector('[contenteditable]')
+                    || document.querySelector('input[type="text"]');
+                if (input) { input.focus(); input.click(); }
+            """)
+            cdp_disconnect(serial, ws, local_port=cdp_port)
+            cdp_focused = True
+            print("    Input focused via CDP")
+            time.sleep(1)
+    except Exception:
+        pass
+
+    if not cdp_focused:
+        input_found = (
+            find_and_tap(serial, resource_id="ask-input")
+            or find_and_tap(serial, text="Ask anything")
+            or find_and_tap(serial, text="Type @")
+            or find_and_tap(serial, text="Type /")
+        )
+        if not input_found:
+            tap(serial, w // 2, int(h * 0.68))
+        time.sleep(1)
+
     type_text(serial, prompt)
     time.sleep(1)
 
-    # Perplexity needs keyboard hide + submit poll
-    from flows_adb import hide_keyboard_and_submit, find_and_tap as adb_find_tap
-    hide_keyboard_and_submit(serial)
+    # Submit via CDP (more reliable than ADB tap which can hit mic button)
+    cdp_submitted = False
+    try:
+        from screenshot import cdp_connect, cdp_eval, cdp_disconnect
+        ws = cdp_connect(serial, local_port=cdp_port)
+        if ws:
+            result = cdp_eval(ws, """
+                var btn = document.querySelector('button[aria-label="Submit"]')
+                    || document.querySelector('button[type="submit"]')
+                    || document.querySelector('button svg[data-icon="arrow-right"]');
+                if (btn) { if (btn.tagName !== 'BUTTON') btn = btn.closest('button'); btn.click(); 'clicked'; }
+                else { 'not found'; }
+            """)
+            cdp_disconnect(serial, ws, local_port=cdp_port)
+            if result and "clicked" in str(result):
+                cdp_submitted = True
+                print("    Submitted via CDP")
+            time.sleep(2)
+    except Exception:
+        pass
+
+    if not cdp_submitted:
+        # Fallback: hide keyboard then find Submit via ADB
+        from flows_adb import hide_keyboard_and_submit
+        hide_keyboard_and_submit(serial)
     time.sleep(3)
 
     # Verify submit worked — if no generation started, retry
+    from flows_adb import hide_keyboard_and_submit
     xml = dump_ui(serial)
     has_stop = any(p in xml for p in ["Stop streaming", "Stop generating", "Stop response"])
     if not has_stop:
         print("    Submit may not have worked — retrying...")
-        # Try tapping Submit again
         hide_keyboard_and_submit(serial)
         time.sleep(2)
-        # Last resort: press Enter
         xml = dump_ui(serial)
         has_stop = any(p in xml for p in ["Stop streaming", "Stop generating", "Stop response"])
         if not has_stop:
@@ -747,7 +795,7 @@ def main():
         result = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=10)
         devices = []
         for line in result.stdout.splitlines()[1:]:
-            parts = line.strip().split()
+            parts = line.strip().split("\t")
             if len(parts) >= 2 and parts[1] == "device":
                 devices.append(parts[0])
 
@@ -814,6 +862,9 @@ def main():
             Each job = 1 keyword × all 3 platforms under same proxy session.
             Proxy reconnects per keyword (new session ID = new IP)."""
             from proxy import setup_device, teardown_device
+
+            # Keep screen on for the entire audit
+            keep_screen_on(dev["serial"])
 
             for job_idx, job in enumerate(queue):
                 client = job["client"]
@@ -891,7 +942,7 @@ def main():
     if not args.serial:
         result = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=10)
         for line in result.stdout.splitlines()[1:]:
-            parts = line.strip().split()
+            parts = line.strip().split("\t")
             if len(parts) >= 2 and parts[1] == "device":
                 args.serial = parts[0]
                 break

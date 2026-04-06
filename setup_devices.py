@@ -49,7 +49,7 @@ def get_connected_devices():
 
     devices = []
     for line in result.stdout.splitlines()[1:]:
-        parts = line.strip().split()
+        parts = line.strip().split("\t")
         if len(parts) >= 2 and parts[1] == "device":
             devices.append(parts[0])
     return devices
@@ -139,7 +139,7 @@ def get_device_model(full_serial):
 
 
 # Devices that can't run Appium UiAutomator2 — use ADB-only flows
-ADB_ONLY_BRANDS = {"infinix", "tecno"}
+ADB_ONLY_BRANDS = {"infinix", "tecno", "oppo"}
 
 
 def check_one_device(args):

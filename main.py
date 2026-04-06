@@ -63,7 +63,7 @@ def _discover_from_adb():
 
     transports = []
     for line in result.stdout.splitlines()[1:]:
-        parts = line.strip().split()
+        parts = line.strip().split("\t")
         if len(parts) >= 2 and parts[1] == "device":
             transports.append(parts[0])
 
@@ -96,7 +96,7 @@ def _get_connected_serials():
 
     connected = set()
     for line in result.stdout.splitlines()[1:]:
-        parts = line.strip().split()
+        parts = line.strip().split("\t")
         if len(parts) >= 2 and parts[1] == "device":
             connected.add(_short_serial(parts[0]))
     return connected
@@ -154,7 +154,7 @@ def get_adb_transport_map():
 
     transport_map = {}
     for line in result.stdout.splitlines()[1:]:
-        parts = line.strip().split()
+        parts = line.strip().split("\t")
         if len(parts) >= 2 and parts[1] == "device":
             transport = parts[0]
             short     = _short_serial(transport)
@@ -285,10 +285,10 @@ def log_session(client, keyword, prompt, follow_up, device_id, status,
             "proxy_host": proxy_info.get("proxy_host"),
             "proxy_port": proxy_info.get("proxy_port"),
             "ip":         proxy_info.get("ip"),
-            "ip_city":    proxy_info.get("ip_city"),
-            "ip_region":  proxy_info.get("ip_region"),
-            "ip_country": proxy_info.get("ip_country"),
-            "ip_zip":     proxy_info.get("ip_zip"),
+            "ip_city":    proxy_info.get("ip_city") or proxy_info.get("city"),
+            "ip_region":  proxy_info.get("ip_region") or proxy_info.get("region"),
+            "ip_country": proxy_info.get("ip_country") or proxy_info.get("country"),
+            "ip_zip":     proxy_info.get("ip_zip") or proxy_info.get("postal"),
         }
 
     if platform_results:

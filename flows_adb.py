@@ -96,17 +96,30 @@ def find_and_tap(serial, text=None, resource_id=None, content_desc=None, label="
 
 # ── Chrome Setup ──────────────────────────────────────────────────────────────
 
+def keep_screen_on(serial):
+    """Keep screen on and wake it if off."""
+    adb(serial, "shell", "settings", "put", "system", "screen_off_timeout", "1800000")
+    adb(serial, "shell", "svc power stayon true")
+    adb(serial, "shell", "input", "keyevent", "KEYCODE_WAKEUP")
+    time.sleep(0.5)
+    adb(serial, "shell", "input", "keyevent", "82")  # unlock
+    time.sleep(0.5)
+
+
 def clear_chrome(serial):
-    """Clear Chrome and lock portrait."""
+    """Clear Chrome, lock portrait, keep screen on, and disable Play Store."""
+    keep_screen_on(serial)
     adb(serial, "shell", "pm", "clear", CHROME_PACKAGE, timeout=15)
     adb(serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0")
     adb(serial, "shell", "settings", "put", "system", "user_rotation", "0")
+    # Disable Play Store so URL intents don't get intercepted
+    adb(serial, "shell", "pm", "disable-user", "--user", "0", "com.android.vending", timeout=5)
 
 
 def dismiss_chrome_fre(serial):
     """Dismiss Chrome first-run dialogs via UI dump + tap."""
     print("  Dismissing Chrome FRE...")
-    for attempt in range(6):
+    for attempt in range(10):
         time.sleep(2)
         xml = dump_ui(serial)
 
@@ -117,6 +130,11 @@ def dismiss_chrome_fre(serial):
         if "Stay signed out" in xml:
             print("    Tapping: Stay signed out")
             find_and_tap(serial, text="Stay signed out")
+            continue
+        if "more_button" in xml and "More about ads" in xml:
+            print("    Tapping: More (ad privacy scroll)")
+            find_and_tap(serial, resource_id="more_button")
+            time.sleep(1)
             continue
         if "ack_button" in xml or "Enhanced ad privacy" in xml:
             print("    Tapping: Got it (ad privacy)")
@@ -134,6 +152,10 @@ def dismiss_chrome_fre(serial):
             print("    Tapping: Accept")
             find_and_tap(serial, text="Accept")
             continue
+        if "Your device works better" in xml or "works better with a" in xml:
+            print("    Tapping: Close (Google Sign-in)")
+            find_and_tap(serial, text="Close") or find_and_tap(serial, resource_id="negative_button")
+            continue
         if "search_box_text" in xml or "url_bar" in xml:
             print("    FRE done — address bar visible")
             break
@@ -148,7 +170,7 @@ def wait_for_page_ready(serial, platform=None, max_wait=45, url=None):
     ready_indicators = {
         "gemini": ["Send message", "Ask Gemini"],
         "chatgpt": ["Ask anything", "prompt-textarea", "Send prompt"],
-        "perplexity": ["Ask anything", "ask-input"],
+        "perplexity": ["Ask anything", "ask-input", "Type @", "Type /"],
     }
 
     platform_key = (platform or "").lower().replace("www.", "")
@@ -164,6 +186,23 @@ def wait_for_page_ready(serial, platform=None, max_wait=45, url=None):
 
     while time.time() - start < max_wait:
         xml = dump_ui(serial)
+
+        # Dismiss Chrome popups that appear mid-navigation
+        if "Enhanced ad privacy" in xml or "ack_button" in xml:
+            print("    Dismissing: ad privacy popup")
+            find_and_tap(serial, resource_id="ack_button") or find_and_tap(serial, text="Got it")
+            time.sleep(2)
+            continue
+        if "More about ads in Chrome" in xml:
+            print("    Dismissing: ads info popup")
+            find_and_tap(serial, text="Got it")
+            time.sleep(2)
+            continue
+        if "Your device works better" in xml or "works better with a" in xml:
+            print("    Dismissing: Google Sign-in popup")
+            find_and_tap(serial, text="Close") or find_and_tap(serial, resource_id="negative_button")
+            time.sleep(2)
+            continue
 
         # Check for page load error — reload if found
         if "site can" in xml.lower() or "ERR_" in xml or "net::ERR" in xml:
