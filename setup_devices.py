@@ -139,7 +139,7 @@ def get_device_model(full_serial):
 
 
 # Devices that can't run Appium UiAutomator2 — use ADB-only flows
-ADB_ONLY_BRANDS = {"infinix", "tecno", "oppo"}
+ADB_ONLY_BRANDS = {"infinix", "tecno"}
 
 
 def check_one_device(args):

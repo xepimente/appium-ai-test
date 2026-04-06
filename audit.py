@@ -43,8 +43,10 @@ AUDIT_PROMPT_TEMPLATE = (
     "Top 3 businesses for {keyword} in {city}, {state}. "
     "Format: numbered list, each entry: name, 2-3 sentence description of why they stand out, "
     "and whether they appear on Google Maps (yes/no). "
-    "After the list, a short paragraph: is {biz_name} ({biz_url}) a leader in this space? "
-    "Keep entire response under 150 words."
+    "After the list, rank {biz_name} ({biz_url}) with a specific position number "
+    "out of all businesses in this space (e.g., #5 out of 20, #12 out of 30). "
+    "Explain briefly why it holds that rank. "
+    "Keep entire response under 200 words."
 )
 
 # Platform URLs
@@ -62,6 +64,184 @@ def slugify(text):
 
 def build_audit_prompt(client):
     return AUDIT_PROMPT_TEMPLATE.format(**client)
+
+
+def format_response_text(raw_text, platform):
+    """Clean up raw AI response text for saving."""
+    if not raw_text:
+        return ""
+
+    # Remove platform noise
+    noise = [
+        "Gemini said", "By the way,", "enable Gemini Apps Activity",
+        "Sources", "ChatGPT can make mistakes", "Check important info",
+        "Follow-ups", "Ask a follow-up", "+1", "+2",
+        "Use two fingers", "Hold Ctrl", "© Mapbox", "© OpenStreetMap",
+        "Terms", "Ask a follow",
+    ]
+    lines = raw_text.split("\n")
+    cleaned = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(stripped.startswith(n) or stripped == n for n in noise):
+            continue
+        if stripped in ("+1", "+2", "+3"):
+            continue
+        cleaned.append(stripped)
+
+    if not cleaned:
+        return ""
+
+    # Detect list items and add numbering if missing
+    # List items typically start with a business name followed by ":" or "–"
+    numbered = []
+    item_num = 0
+    for line in cleaned:
+        # Already numbered (e.g., "1. Business Name")
+        if re.match(r'^\d+[.)]\s', line):
+            numbered.append(line)
+            item_num = int(re.match(r'^(\d+)', line).group(1))
+            continue
+
+        # Looks like a list item (Name: description or Name – description)
+        # Only number the first few items (top 3-5)
+        if (re.match(r"^[A-Z][\w\s''\-&]+[:\u2013\u2014\u2013]", line)
+                and item_num < 10
+                and "Google Maps" not in line.split(":")[0]
+                and "Rank" not in line.split(":")[0]):
+            # Check if the previous line was a list item continuation
+            if "Google Maps:" in line.lower() or "appears on google" in line.lower():
+                numbered.append(f"   {line}")
+                continue
+            item_num += 1
+            numbered.append(f"#{item_num}. {line}")
+        else:
+            numbered.append(line)
+
+    return "\n\n".join(numbered)
+
+
+def extract_ranking(response_text, biz_name, biz_url=""):
+    """
+    Extract the ranking position of a business from the AI response text.
+    Searches for numbered items and checks if the business name or URL appears.
+
+    Returns:
+        dict with:
+          - position: int or None (e.g., 1, 2, 5, None if not in list)
+          - mentioned: bool (appears anywhere in response)
+          - context: str (the line/sentence where it was found)
+    """
+    if not response_text:
+        return {"position": None, "total": None, "mentioned": False, "context": ""}
+
+    # Normalize curly quotes and strip apostrophes for flexible matching
+    def normalize(s):
+        return s.replace("\u2018", "'").replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
+
+    def strip_apostrophes(s):
+        return s.replace("'", "").replace("\u2019", "")
+
+    text = normalize(response_text.strip())
+    biz_lower = normalize(biz_name).lower()
+    biz_no_apos = strip_apostrophes(biz_lower)
+    # Also match partial name (e.g., "Mae's" from "Mae's Childcare")
+    biz_parts = [p.lower() for p in biz_name.split() if len(p) > 2]
+    url_domain = ""
+    if biz_url:
+        url_domain = biz_url.lower().replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
+
+    text_lower = text.lower()
+    text_no_apos = strip_apostrophes(text_lower)
+    mentioned = (biz_lower in text_lower
+                 or biz_no_apos in text_no_apos
+                 or (url_domain and url_domain in text_lower))
+
+    lines = text.split("\n")
+    position = None
+    total = None
+    context = ""
+
+    def matches_biz(line_text):
+        """Check if a line references the business."""
+        ll = line_text.lower()
+        ll_no_apos = strip_apostrophes(ll)
+        if biz_lower in ll or biz_no_apos in ll_no_apos:
+            return True
+        if url_domain and url_domain in ll:
+            return True
+        if len(biz_parts) >= 2:
+            matches = sum(1 for p in biz_parts if p in ll)
+            if matches >= 2:
+                return True
+        return False
+
+    # First: look for explicit rank statement like "#18 out of 50+" or "Rank: #12"
+    for line in lines:
+        stripped = line.strip()
+        if (not matches_biz(stripped)
+                and not re.search(r'#\d+\s*(?:out of|/)', stripped)
+                and not re.search(r'(?:rank|ranked|ranks|position)[:\s]*#?\d+', stripped, re.IGNORECASE)):
+            continue
+        rank_match = re.search(r'#(\d+)\s*(?:out of|/)\s*~?(\d+\+?)', stripped)
+        if not rank_match:
+            rank_match = re.search(r'(?:rank|ranked|ranks|position)[:\s]*#?(\d+)\s*(?:out of|/)\s*~?(\d+\+?)', stripped, re.IGNORECASE)
+        if not rank_match:
+            rank_match = re.search(r'(?:rank|ranked|ranks|position)[:\s]*#?(\d+)', stripped, re.IGNORECASE)
+        if rank_match:
+            position = int(rank_match.group(1))
+            if rank_match.lastindex >= 2:
+                total = rank_match.group(2)
+            context = stripped[:200]
+            break
+
+    # Skip numbered list scan if we already found explicit rank
+    if position is not None:
+        return {"position": position, "total": total, "mentioned": True, "context": context}
+
+    # Track current numbered position as we scan
+    current_num = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Match numbered patterns at start of line
+        num_match = re.match(r'^(?:#?\s*)?(\d+)[.):\s]', stripped)
+        if not num_match:
+            num_match = re.match(r'^(?:Number|No\.?)\s*(\d+)', stripped, re.IGNORECASE)
+
+        if num_match:
+            current_num = int(num_match.group(1))
+            # Check this line and the next few lines for the business name
+            chunk = " ".join(lines[i:i+4])
+            if matches_biz(chunk):
+                position = current_num
+                context = stripped[:200]
+                break
+        elif current_num is not None and matches_biz(stripped):
+            # Business name found in continuation of a numbered item
+            position = current_num
+            context = stripped[:200]
+            break
+
+    # If not found in numbered list, check if mentioned anywhere
+    if position is None and mentioned:
+        for line in lines:
+            ll = normalize(line).lower()
+            ll_na = strip_apostrophes(ll)
+            if biz_lower in ll or biz_no_apos in ll_na or (url_domain and url_domain in ll):
+                context = line.strip()[:200]
+                break
+
+    return {
+        "position": position,
+        "total": total,
+        "mentioned": mentioned,
+        "context": context,
+    }
 
 
 def load_log():
@@ -85,7 +265,7 @@ def save_log(entries):
 
 
 def log_entry(client, keyword, platform, mode, device, status, screenshot_path, text_path,
-              error=None, proxy_info=None, duration_s=None):
+              error=None, proxy_info=None, duration_s=None, ranking=None):
     """Add an entry to the audit log."""
     entries = load_log()
     entry = {
@@ -104,6 +284,8 @@ def log_entry(client, keyword, platform, mode, device, status, screenshot_path, 
         entry["error"] = error
     if duration_s is not None:
         entry["duration_s"] = duration_s
+    if ranking:
+        entry["ranking"] = ranking
     if proxy_info:
         entry["proxy"] = {
             "status":     proxy_info.get("status"),
@@ -245,22 +427,16 @@ def audit_gemini_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=Tr
 
     if is_first:
         clear_chrome(serial)
-        time.sleep(1)
-        # Launch Chrome and type URL in address bar
-        adb(serial, "shell", "am", "start", "-n",
-            "com.android.chrome/com.google.android.apps.chrome.Main")
+    adb(serial, "shell", "am", "force-stop", "com.android.chrome")
+    time.sleep(1)
+
+    adb(serial, "shell", "am", "start", "--activity-clear-task",
+        "-a", "android.intent.action.VIEW",
+        "-d", "https://gemini.google.com", "com.android.chrome")
+
+    if is_first:
         time.sleep(3)
         _dismiss_gemini_popups(serial)
-        from flows_adb import find_and_tap as adb_find_tap, press_enter
-        if not adb_find_tap(serial, resource_id="search_box_text"):
-            adb_find_tap(serial, resource_id="url_bar")
-        time.sleep(1)
-        adb(serial, "shell", "input", "text", "gemini.google.com", timeout=10)
-        time.sleep(0.3)
-        press_enter(serial)
-    else:
-        adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
-            "-d", "https://gemini.google.com", "com.android.chrome")
 
     wait_for_page_ready(serial, platform="gemini")
 
@@ -314,7 +490,11 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=T
         clear_chrome(serial)
         time.sleep(1)
 
-    adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
+    adb(serial, "shell", "am", "force-stop", "com.android.chrome")
+    time.sleep(1)
+
+    adb(serial, "shell", "am", "start", "--activity-clear-task",
+        "-a", "android.intent.action.VIEW",
         "-d", "https://chatgpt.com", "com.android.chrome")
 
     if is_first:
@@ -379,7 +559,11 @@ def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222, is_firs
         clear_chrome(serial)
         time.sleep(1)
 
-    adb(serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
+    adb(serial, "shell", "am", "force-stop", "com.android.chrome")
+    time.sleep(1)
+
+    adb(serial, "shell", "am", "start", "--activity-clear-task",
+        "-a", "android.intent.action.VIEW",
         "-d", "https://www.perplexity.ai", "com.android.chrome")
 
     if is_first:
@@ -721,14 +905,51 @@ def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port
             )
 
         duration = round(time.time() - start_time, 1)
+
+        # Read raw text, format it, extract ranking, and rewrite
+        response_text = ""
+        try:
+            with open(text_path) as f:
+                response_text = f.read()
+        except Exception:
+            pass
+
+        ranking = extract_ranking(response_text, client.get("biz_name", ""),
+                                  client.get("biz_url", ""))
+
         entry = log_entry(client, keyword, platform, mode, serial,
                           "success", ss_path, text_path,
-                          proxy_info=proxy_info, duration_s=duration)
+                          proxy_info=proxy_info, duration_s=duration,
+                          ranking=ranking)
+
+        # Rewrite text file with formatted text + ranking summary
+        if response_text:
+            try:
+                formatted = format_response_text(response_text, platform)
+                pos = ranking.get("position")
+                total_s = f" out of {ranking.get('total')}" if ranking.get("total") else ""
+                with open(text_path, "w") as f:
+                    f.write(formatted)
+                    f.write(f"\n\n--- AEO Ranking ---\n")
+                    f.write(f"Business: {client.get('biz_name', '')}\n")
+                    f.write(f"Keyword: {keyword}\n")
+                    f.write(f"Platform: {platform}\n")
+                    f.write(f"Position: {f'#{pos}{total_s}' if pos else 'Not ranked'}\n")
+                    f.write(f"Mentioned: {'Yes' if ranking.get('mentioned') else 'No'}\n")
+                    if ranking.get("context"):
+                        f.write(f"Context: {ranking['context']}\n")
+            except Exception:
+                pass
+
+        pos = ranking.get("position")
+        total_str = f" out of {ranking['total']}" if ranking.get("total") else ""
+        pos_str = f"#{pos}{total_str}" if pos else ("mentioned" if ranking.get("mentioned") else "not found")
         print(f"\n  Screenshot: {ss_path}")
         print(f"  Text: {text_path}")
+        print(f"  Ranking: {pos_str}")
         print(f"  Status: SUCCESS ({duration}s)")
         return {"status": "success", "screenshot": ss_path, "text": text_path,
-                "timestamp": timestamp}
+                "timestamp": timestamp, "ranking": ranking}
 
     except Exception as e:
         error_msg = f"{type(e).__name__}: {e}"
