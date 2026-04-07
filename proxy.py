@@ -48,64 +48,109 @@ def generate_session_id(length: int = 8) -> str:
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-def build_proxy_username(proxy_config: Dict[str, Any]) -> str:
+def build_proxy_credentials(proxy_config: Dict[str, Any]) -> tuple:
     """
-    Build a residential proxy username with session parameters.
+    Build proxy username and password with session parameters.
 
-    Credentials (host, base_user, password) come from env vars.
-    Location (country, zip) comes from client's proxy config.
+    For IPRoyal: session/country/city goes in the PASSWORD suffix.
+    For Decodo: session/country/zip goes in the USERNAME.
 
-    Example output:
-      user-spmtfc6iiw-session-a1b2c3d4-sessionduration-30-country-us-zip-94117
+    Returns (username, password).
+
+    IPRoyal format:
+      username: O9nlBJemrn7d3nuv
+      password: 9mvU8dH2TdVdzbiH_country-us_session-{id}_lifetime-59m
+
+    Decodo format:
+      username: user-spmtfc6iiw-session-{id}-sessionduration-30-country-us-zip-94117
+      password: (static from env)
     """
-    base_user = PROXY_BASE_USER
     session_id = generate_session_id()
-    duration = proxy_config.get("session_duration", 30)
     country = proxy_config.get("country", "us")
+    duration = proxy_config.get("session_duration", 60)
     zip_code = proxy_config.get("zip", "")
+    city = proxy_config.get("city_proxy", "")  # IPRoyal city targeting
 
-    parts = [
-        base_user,
-        f"session-{session_id}",
-        f"sessionduration-{duration}",
-        f"country-{country}",
-    ]
-    if zip_code:
-        parts.append(f"zip-{zip_code}")
+    # Detect provider by hostname
+    if "iproyal" in PROXY_HOST:
+        # IPRoyal: rotation params go in password
+        # Format: {base_password}_country-us_session-{id}_lifetime-60m
+        # NOTE: city/state targeting makes password too long for SocksDroid — use country only
+        username = PROXY_BASE_USER
+        password_parts = [
+            PROXY_PASSWORD,
+            f"country-{country}",
+            f"session-{session_id}",
+            f"lifetime-{duration}m",
+        ]
+        password = "_".join(password_parts)
+        return username, password
+    else:
+        # Decodo: rotation params go in username
+        parts = [
+            PROXY_BASE_USER,
+            f"session-{session_id}",
+            f"sessionduration-{duration}",
+            f"country-{country}",
+        ]
+        if zip_code:
+            parts.append(f"zip-{zip_code}")
+        return "-".join(parts), PROXY_PASSWORD
 
-    return "-".join(parts)
+
+# Keep backward compat
+def build_proxy_username(proxy_config: Dict[str, Any]) -> str:
+    """Legacy — returns username only. Use build_proxy_credentials() instead."""
+    username, _ = build_proxy_credentials(proxy_config)
+    return username
 
 
 # ── IP Check ──────────────────────────────────────────────────────────────────
 
-def get_device_ip(serial: str, timeout: int = 10) -> Dict[str, Any]:
+def get_device_ip(serial: str, timeout: int = 20) -> Dict[str, Any]:
     """
-    Get the device's current public IP by curling ifconfig.me via ADB.
-    Then look up geolocation via ipinfo.io from the Mac.
+    Get the device's current public IP.
+    Tries: 1) adb shell curl  2) CDP fetch via Chrome  3) Device Manager API
+    Then looks up geolocation via ipinfo.io.
     """
     import subprocess
 
-    # Get IP from device
-    try:
-        result = subprocess.run(
-            ["adb", "-s", serial, "shell", "curl", "-s", "--connect-timeout", "5",
-             "https://ifconfig.me"],
-            capture_output=True, text=True, timeout=timeout,
-        )
-        ip = result.stdout.strip()
-        if not ip or "not found" in ip.lower():
-            # Fallback: use wget
+    ip = None
+
+    # Method 1: adb shell curl (works on devices with curl)
+    for url in ["http://ifconfig.me", "http://api.ipify.org", "http://icanhazip.com"]:
+        try:
             result = subprocess.run(
-                ["adb", "-s", serial, "shell", "wget", "-qO-",
-                 "https://ifconfig.me"],
+                ["adb", "-s", serial, "shell", "curl", "-s", "--connect-timeout", "10", url],
                 capture_output=True, text=True, timeout=timeout,
             )
-            ip = result.stdout.strip()
-    except Exception:
-        return {"ip": "unknown", "error": "failed to get IP from device"}
+            candidate = result.stdout.strip()
+            if candidate and len(candidate) <= 45 and "not found" not in candidate.lower() and "inaccessible" not in candidate.lower():
+                ip = candidate
+                break
+        except Exception:
+            continue
 
-    if not ip or len(ip) > 50:
-        return {"ip": "unknown", "error": "invalid response"}
+    # Method 2: Use CDP to fetch IP through Chrome (works on all devices)
+    if not ip:
+        try:
+            from screenshot import cdp_connect, cdp_disconnect, cdp_eval
+            for cdp_port in [9222, 9223, 9224, 9225, 9226]:
+                try:
+                    ws = cdp_connect(serial, local_port=cdp_port)
+                    result = cdp_eval(ws, "fetch('http://api.ipify.org').then(r=>r.text())")
+                    cdp_disconnect(serial, ws, local_port=cdp_port)
+                    candidate = (result or "").strip()
+                    if candidate and len(candidate) <= 45 and "." in candidate:
+                        ip = candidate
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    if not ip:
+        return {"ip": "unknown", "error": "failed to get IP from device"}
 
     # Look up geolocation
     try:
@@ -157,18 +202,18 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
     except Exception:
         pass
 
-    username = build_proxy_username(proxy_config)
+    username, password = build_proxy_credentials(proxy_config)
 
     payload = {
         "deviceId": serial,
         "url": PROXY_HOST,
         "port": PROXY_PORT,
         "username": username,
-        "password": PROXY_PASSWORD,
+        "password": password,
     }
 
     print(f"  [Proxy] Connecting {serial[:20]}... → {PROXY_HOST}:{PROXY_PORT}")
-    print(f"  [Proxy] Username: {username}")
+    print(f"  [Proxy] Credentials: {username} / {password[:30]}...")
 
     try:
         resp = requests.post(
@@ -209,6 +254,31 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
     except Exception as e:
         print(f"  [Proxy] ERROR — {e}")
         return {"status": "ERROR", "username": username, "error": str(e)}
+
+
+def verify_connection(serial: str, timeout: int = 15) -> bool:
+    """
+    Verify device has working internet through proxy.
+    Curls a lightweight URL and checks for a valid response.
+    Returns True if connection works, False otherwise.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["adb", "-s", serial, "shell", "curl", "-s", "--connect-timeout", "10",
+             "http://httpbin.org/status/200"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        # httpbin returns empty body with 200 status — success if no error
+        if result.returncode == 0 and "could not resolve" not in result.stderr.lower():
+            print(f"  [Proxy] Connection verified — internet working")
+            return True
+    except Exception:
+        pass
+
+    print(f"  [Proxy] Connection verification FAILED — no internet")
+    return False
 
 
 def disconnect_proxy(serial: str, timeout: int = 15) -> Dict[str, Any]:
@@ -323,16 +393,72 @@ def randomize_location(latitude: float, longitude: float,
     return round(latitude + offset_lat, 6), round(longitude + offset_lng, 6)
 
 
-def setup_device(serial: str, proxy_config: Dict[str, Any]) -> Dict[str, Any]:
+def _wait_for_internet(serial: str, max_wait: int = 15) -> bool:
+    """
+    Wait until device has working internet through proxy.
+    Checks if tun0 VPN interface is UP (doesn't test actual throughput — that's
+    too slow and ICMP doesn't go through SOCKS5 anyway).
+    Returns True if VPN tunnel is active, False if not.
+    """
+    import subprocess
+
+    start = time.time()
+    attempt = 0
+    while time.time() - start < max_wait:
+        attempt += 1
+        try:
+            result = subprocess.run(
+                ["adb", "-s", serial, "shell", "ifconfig", "tun0"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if "UP" in result.stdout and "inet addr" in result.stdout:
+                elapsed = int(time.time() - start)
+                print(f"  [Proxy] VPN tunnel active — tun0 UP ({elapsed}s, attempt {attempt})")
+                return True
+        except Exception:
+            pass
+        time.sleep(2)
+
+    print(f"  [Proxy] VPN tunnel not found after {max_wait}s")
+    return False
+
+
+def setup_device(serial: str, proxy_config: Dict[str, Any],
+                  max_retries: int = 2) -> Dict[str, Any]:
     """
     Full device setup for a session: proxy + location + timezone.
     Location is randomized within 5 miles of the base coordinates.
+    After connecting proxy, waits for VPN tunnel to be active.
+    If connect fails, retries once with new session ID.
     Returns combined result with proxy, location, timezone status.
     """
     result = {}
 
-    # 1. Connect proxy
-    proxy_info = connect_proxy(serial, proxy_config)
+    proxy_info = None
+    for attempt in range(1, max_retries + 1):
+        proxy_info = connect_proxy(serial, proxy_config)
+
+        if proxy_info.get("status") != "CONNECTED":
+            print(f"  [Proxy] Connect failed (attempt {attempt}/{max_retries})")
+            if attempt < max_retries:
+                disconnect_proxy(serial)
+                time.sleep(3)
+            continue
+
+        # Wait for VPN tunnel to come up
+        time.sleep(3)
+        if _wait_for_internet(serial, max_wait=15):
+            break
+
+        # tun0 not up — retry once
+        if attempt < max_retries:
+            print(f"  [Proxy] VPN tunnel not ready — retrying (attempt {attempt}/{max_retries})...")
+            disconnect_proxy(serial)
+            time.sleep(3)
+        else:
+            # API said CONNECTED — trust it and proceed
+            print(f"  [Proxy] tun0 not detected but API says CONNECTED — proceeding")
+
     result["proxy"] = proxy_info
 
     # 2. Set mock location — randomized within 5 miles

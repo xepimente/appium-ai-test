@@ -1,51 +1,72 @@
 {
   "device-001": {
-    "serial": "149145555W001028",
+    "serial": "192.168.254.204:37811",
     "port": 4723,
     "use_adb": true,
     "brand": "Infinix",
-    "model": "X6725"
+    "model": "Infinix X6725"
   },
   "device-002": {
-    "serial": "149145555W002563",
-    "port": 4724,
-    "use_adb": true,
-    "brand": "Infinix",
-    "model": "X6725"
-  },
-  "device-003": {
-    "serial": "149145555W002883",
+    "serial": "0B64C27G23101E10",
     "port": 4725,
-    "use_adb": true,
-    "brand": "Infinix",
-    "model": "X6725"
+    "use_adb": false,
+    "brand": "realme",
+    "model": "RMX3930"
   },
   "device-004": {
-    "serial": "149145555W005208",
+    "serial": "10HFBBFEBZ000RA",
     "port": 4726,
-    "use_adb": true,
-    "brand": "Infinix",
-    "model": "X6725"
+    "use_adb": false,
+    "brand": "vivo",
+    "model": "V2430"
   },
   "device-005": {
-    "serial": "149145555W006477",
+    "serial": "139517057H002933",
     "port": 4727,
-    "use_adb": true,
-    "brand": "Infinix",
-    "model": "X6725"
+    "use_adb": false,
+    "brand": "Itel",
+    "model": "itel A6610L"
   },
   "device-006": {
-    "serial": "149145555W006589",
+    "serial": "147263758M001636",
     "port": 4728,
     "use_adb": true,
-    "brand": "Infinix",
-    "model": "X6725"
+    "brand": "TECNO",
+    "model": "TECNO KM4k"
   },
   "device-007": {
-    "serial": "149145555W006788",
-    "port": 4729,
+    "serial": "323952008165",
+    "port": 4730,
+    "use_adb": false,
+    "brand": "nubia",
+    "model": "Z2460"
+  },
+  "device-009": {
+    "serial": "G6TGT4SCTCYTDMDU",
+    "port": 4731,
+    "use_adb": false,
+    "brand": "Redmi",
+    "model": "25078RA3EA"
+  },
+  "device-010": {
+    "serial": "NZNBYL5DE6GIK7VS",
+    "port": 4732,
+    "use_adb": false,
+    "brand": "Redmi",
+    "model": "25078RA3EA"
+  },
+  "device-011": {
+    "serial": "R83L112EVWK",
+    "port": 4733,
+    "use_adb": false,
+    "brand": "samsung",
+    "model": "SM-A075F"
+  },
+  "device-012": {
+    "serial": "c0897ffc",
+    "port": 4734,
     "use_adb": true,
-    "brand": "Infinix",
-    "model": "X6725"
+    "brand": "OPPO",
+    "model": "CPH2773"
   }
 }

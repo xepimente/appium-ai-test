@@ -1,0 +1,100 @@
+{
+  "device-001": {
+    "serial": "0B64C27G22100FA1",
+    "port": 4723,
+    "use_adb": true,
+    "brand": "realme",
+    "model": "RMX3930"
+  },
+  "device-002": {
+    "serial": "0B64C27G23101E10",
+    "port": 4724,
+    "use_adb": true,
+    "brand": "realme",
+    "model": "RMX3930"
+  },
+  "device-003": {
+    "serial": "147263758M001636",
+    "port": 4725,
+    "use_adb": true,
+    "brand": "TECNO",
+    "model": "TECNO KM4k"
+  },
+  "device-004": {
+    "serial": "1490455613010287",
+    "port": 4726,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-005": {
+    "serial": "149145555W002563",
+    "port": 4727,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-006": {
+    "serial": "149145555W002883",
+    "port": 4728,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-007": {
+    "serial": "149145555W006477",
+    "port": 4729,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-008": {
+    "serial": "149145555W006589",
+    "port": 4730,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-009": {
+    "serial": "149145555W006788",
+    "port": 4731,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-010": {
+    "serial": "323952008165",
+    "port": 4732,
+    "use_adb": true,
+    "brand": "nubia",
+    "model": "Z2460"
+  },
+  "device-011": {
+    "serial": "324651961440",
+    "port": 4733,
+    "use_adb": true,
+    "brand": "nubia",
+    "model": "Z2460"
+  },
+  "device-015": {
+    "serial": "R83L103VCVH",
+    "port": 4737,
+    "use_adb": true,
+    "brand": "samsung",
+    "model": "SM-A075F"
+  },
+  "device-016": {
+    "serial": "R83L112EVWK",
+    "port": 4738,
+    "use_adb": true,
+    "brand": "samsung",
+    "model": "SM-A075F"
+  },
+  "device-017": {
+    "serial": "c0897ffc",
+    "port": 4739,
+    "use_adb": true,
+    "brand": "OPPO",
+    "model": "CPH2773"
+  }
+}

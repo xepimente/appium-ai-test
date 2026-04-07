@@ -1,0 +1,1 @@
+Show connected AEO devices. Run `adb devices` and cross-reference with active_devices.json if it exists. Show which are online/offline and assigned/unassigned.

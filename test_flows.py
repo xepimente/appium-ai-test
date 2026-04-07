@@ -38,6 +38,11 @@ TEST_FOLLOW_UP = (
     "Cool, do they post updates or photos on their profile so I can see what the environment looks like?"
 )
 
+TEST_BACKLINKS = [
+    "https://www.maeschildcare.com/bilingual-program",
+    "https://www.maeschildcare.com/enrollment",
+]
+
 TEST_PLATFORMS = ["Gemini", "ChatGPT", "Perplexity"]
 
 BASE_PORT = 4723
@@ -115,7 +120,8 @@ def make_driver(short_serial, full_serial, port):
 # ── Test Runner ────────────────────────────────────────────────────────────────
 
 def run_platform_test(platform, short_serial, full_serial, port,
-                      prompt, follow_up, skip_follow_up=False):
+                      prompt, follow_up, skip_follow_up=False,
+                      backlinks=None):
     """Run one platform flow and return result dict."""
     print(f"\n{'='*60}")
     print(f"  Platform : {platform}")
@@ -125,6 +131,8 @@ def run_platform_test(platform, short_serial, full_serial, port,
         print(f"  Follow-up: {follow_up[:60]}...")
     else:
         print(f"  Follow-up: (skipped)")
+    if backlinks:
+        print(f"  Backlinks: {len(backlinks)} URLs")
     print(f"{'='*60}")
 
     print(f"\n  Clearing Chrome...")
@@ -137,7 +145,8 @@ def run_platform_test(platform, short_serial, full_serial, port,
         print(f"  Driver connected.")
 
         fu = follow_up if not skip_follow_up else None
-        result = run_flow(platform, driver, full_serial, prompt, fu)
+        result = run_flow(platform, driver, full_serial, prompt, fu,
+                          backlinks=backlinks)
 
         status = result.get("status")
         steps  = result.get("steps", [])
@@ -177,6 +186,8 @@ def main():
                         help=f"Appium server port (default: {BASE_PORT})")
     parser.add_argument("--no-follow-up", action="store_true",
                         help="Skip follow-up prompt in all flows")
+    parser.add_argument("--backlinks", action="store_true",
+                        help="Enable backlink click after flow completes")
     args = parser.parse_args()
 
     short_serial, full_serial = pick_device(args.serial)
@@ -190,6 +201,9 @@ def main():
     print(f"Tests   : {', '.join(platforms)}")
     print(f"Prompt  : {TEST_PROMPT[:70]}...")
     print(f"Follow  : {'SKIPPED' if args.no_follow_up else TEST_FOLLOW_UP[:60] + '...'}")
+    print(f"Backlinks: {'ON' if args.backlinks else 'OFF'}")
+
+    bl = TEST_BACKLINKS if args.backlinks else None
 
     results = []
     for platform in platforms:
@@ -201,6 +215,7 @@ def main():
             prompt       = TEST_PROMPT,
             follow_up    = TEST_FOLLOW_UP,
             skip_follow_up = args.no_follow_up,
+            backlinks    = bl,
         )
         results.append(result)
 

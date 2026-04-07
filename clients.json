@@ -9,9 +9,11 @@
     "biz_url": "https://www.maeschildcare.com",
     "gmb_url": "",
     "proxy": {
-      "session_duration": 30,
+      "session_duration": 60,
       "country": "us",
       "zip": "94117",
+      "iproyal_state": "california",
+      "iproyal_city": "san_francisco",
       "latitude": 37.77784,
       "longitude": -122.430147,
       "timezone": "America/Los_Angeles"
@@ -48,34 +50,43 @@
   },
   {
     "id": 1,
-    "biz_name": "Bupp Contracting & Remodeling LLC",
+    "biz_name": "Bupp Contracting",
     "plan": "Monthly-Pro",
-    "city": "Frederick",
-    "state": "Maryland",
-    "address": "801 Toll House Avenue, Frederick, MD 21701-4564, USA",
-    "biz_url": "https://buppcontracting.com",
-    "gmb_url": "https://maps.app.goo.gl/Y3AmHjRT2eChwW3Q6",
+    "city": "Salt Lake City",
+    "state": "Utah",
+    "address": "1234 S Main St, Salt Lake City, UT 84115",
+    "biz_url": "https://www.buppcontracting.com",
+    "gmb_url": "",
     "proxy": {
-      "session_duration": 30,
+      "session_duration": 60,
       "country": "us",
-      "zip": "21701",
-      "latitude": 39.41427,
-      "longitude": -77.41054,
-      "timezone": "America/New_York"
+      "zip": "84115",
+      "iproyal_state": "utah",
+      "iproyal_city": "salt_lake_city",
+      "latitude": 40.7608,
+      "longitude": -111.891,
+      "timezone": "America/Denver"
     },
     "keywords": [
       {
-        "keyword": "Bupp Contracting & Remodeling LLC",
-        "backlinks": [
-          "https://buppcontracting.com/about",
-          "https://buppcontracting.com/services"
-        ]
+        "keyword": "concrete contractor Salt Lake City",
+        "backlinks": []
       },
       {
-        "keyword": "roofing company Frederick MD",
-        "backlinks": [
-          "https://buppcontracting.com/roofing"
-        ]
+        "keyword": "foundation repair Utah",
+        "backlinks": []
+      },
+      {
+        "keyword": "driveway contractor SLC",
+        "backlinks": []
+      },
+      {
+        "keyword": "stamped concrete Salt Lake City",
+        "backlinks": []
+      },
+      {
+        "keyword": "concrete patio Salt Lake City",
+        "backlinks": []
       }
     ]
   }
