@@ -209,47 +209,164 @@ Show today's results.
 
 ## run audit ranking
 
-Execute the ranking audit flow. Steps run in order with confirmation gates.
+Execute the ranking audit flow. The audit sends a prompt to each AI platform asking for the top 3 businesses for a keyword + the client's specific ranking position (e.g., #12 out of 30). It captures screenshots, extracts response text, and logs the ranking.
 
-### Step 1 — Health Check
-Run `check health`. DeepSeek key is NOT required for audit.
-If Runner or Device Manager is down, stop.
-
-### Step 2 — Assign Devices
-Run `assign devices`. Show the device pool.
-**Ask:** "N devices ready. Proceed to audit planning?"
-
-### Step 3 — Plan
-```bash
-curl -s http://localhost:5001/clients | python3 -m json.tool
+### Audit Prompt Template
 ```
-Show which clients and keywords will be audited.
-Each keyword runs on all 3 platforms (Gemini, ChatGPT, Perplexity) with screenshots.
-**Ask:** "N keywords x 3 platforms = N audits. Proceed?"
+Top 3 businesses for {keyword} in {city}, {state}. Format: numbered list,
+each entry: name, 2-3 sentence description of why they stand out, and
+whether they appear on Google Maps (yes/no). After the list, rank
+{biz_name} ({biz_url}) with a specific position number out of all
+businesses in this space (e.g., #5 out of 20, #12 out of 30). Explain
+briefly why it holds that rank. Keep entire response under 200 words.
+```
 
-### Step 4 — Execute
-Default — all devices in parallel:
+### Audit Flow Per Device
+1. Clear Chrome (`pm clear`) + disable Play Store + keep screen on (first platform only)
+2. Force-stop Chrome → launch with platform URL (clean session each time)
+3. Dismiss Chrome FRE if needed (fresh Chrome only)
+4. Wait for page ready → type prompt → submit
+5. Wait for AI response → CDP scroll to top → screenshot
+6. CDP extract response text
+7. Parse ranking from response (position, total, mentioned, context)
+8. Format text (add #1 #2 #3, remove noise) → save text file with AEO Ranking summary
+9. Log to audit_log.json with ranking data
+
+### Output Structure
+```
+audit_results/
+├── Gemini/          # Screenshots
+├── ChatGPT/
+├── Perplexity/
+├── text/            # Formatted response text + AEO Ranking summary
+└── audit_log.json   # Full log with ranking data per entry
+```
+
+### audit_log.json Entry
+```json
+{
+  "timestamp": "2026-04-07 02:11:46",
+  "client_id": 0,
+  "biz_name": "Mae's Childcare",
+  "keyword": "bilingual childcare San Francisco",
+  "platform": "Gemini",
+  "status": "success",
+  "ranking": {
+    "position": 12,
+    "total": "40",
+    "mentioned": true,
+    "context": "Mae's Childcare Rank: #12 out of 40"
+  }
+}
+```
+
+### Running the Audit
+
+**All available devices, all clients:**
 ```bash
 cd ~/projects/aeo-appium && python3 audit.py --all-devices
 ```
 
-The script handles everything: proxy per keyword, all 3 platforms, screenshots, GPS, timezone, dedup via audit_rotation.json, saving to audit_results/.
-
-Wait for completion and show the output.
-
-If the user requests variations:
-- Single device: `python3 audit.py --serial {serial}`
-- Limit clients: `python3 audit.py --clients N`
-- Single platform: `python3 audit.py --platform Gemini --serial {serial}`
-
-### Step 5 — Summary
-Show audit results (see `show audit status`).
-
-If output says all keywords already done today, offer to reset:
+**All devices, limit to N clients:**
 ```bash
-cd ~/projects/aeo-appium && python3 audit.py --reset
+python3 audit.py --all-devices --clients 2
 ```
-Then re-run.
+
+**All devices, exclude specific devices:**
+```bash
+python3 audit.py --all-devices --exclude 192.168.254.205,149145555W006477
+```
+
+**Single device, all platforms:**
+```bash
+python3 audit.py --serial "adb-c0897ffc-JhPkn1 (2)._adb-tls-connect._tcp" --mode adb --clients 1
+```
+
+**Single device, single platform:**
+```bash
+python3 audit.py --serial <serial> --mode adb --platform Gemini --clients 1
+```
+
+**Single device, specific keyword:**
+```bash
+python3 audit.py --serial <serial> --mode adb --clients 1 --keyword-index 0
+```
+
+**Test with dummy client:**
+```bash
+python3 audit.py --test --platform Gemini --serial <serial>
+```
+
+### What the User Might Ask
+
+| User says | What to run |
+|-----------|------------|
+| "test this device" | `audit.py --serial <serial> --clients 1 --keyword-index 0` |
+| "test only Perplexity" | `audit.py --serial <serial> --platform Perplexity --clients 1` |
+| "test all platforms on this device" | `audit.py --serial <serial> --clients 1 --keyword-index 0` |
+| "run all available devices" | `audit.py --all-devices --clients N` |
+| "run all from top to last" | `audit.py --all-devices` (all clients, all keywords) |
+| "run just client 1" | `audit.py --all-devices --clients 1` |
+| "skip the Infinix" | `audit.py --all-devices --exclude <infinix-serial-substring>` |
+| "show audit results" | `cat audit_results/audit_log.json \| python3 -m json.tool` |
+| "what's Mae's ranking?" | Read audit_log.json, filter by biz_name, show ranking per platform |
+
+### Before Running — Checklist
+1. Devices connected: `adb devices`
+2. Internet working on devices: `adb -s <serial> shell ping -c 1 google.com`
+3. Screen awake: `adb -s <serial> shell input keyevent KEYCODE_WAKEUP`
+4. No SocksDroid blocking: check if installed and remove/disable if no proxy GB
+5. OPPO: "Disable Permission Monitoring" must be ON in Developer Options
+6. Redmi: Mi account signed in for USB debugging security
+
+### Device Brands and Modes
+| Brand | ADB_ONLY | Notes |
+|-------|----------|-------|
+| Infinix | Yes | Original test device |
+| TECNO | Yes | Similar to Infinix |
+| Redmi | No (Appium) | Needs Mi account for USB debug security |
+| Samsung | No (Appium) | Works out of box |
+| Realme | No (Appium) | Works out of box |
+| Vivo | No (Appium) | Check for SocksDroid |
+| Itel | No (Appium) | Chrome may be slow (Android 14) |
+| Nubia | No (Appium) | Works out of box |
+| OPPO | No (Appium) | Needs "Disable Permission Monitoring" |
+
+Note: The audit uses ADB mode for ALL devices regardless of the mode setting. The ADB_ONLY flag only affects daily sessions (session_runner.py).
+
+### Step-by-Step (Full Flow)
+
+### Step 1 — Assign Devices
+```bash
+bash start_appium.sh          # Start Appium servers
+python3 setup_devices.py --assign   # Discover + health check + assign
+```
+
+### Step 2 — Clean Previous Results (Optional)
+```bash
+rm -rf audit_results/ChatGPT/* audit_results/Gemini/* audit_results/Perplexity/* audit_results/text/*
+echo '[]' > audit_results/audit_log.json
+```
+
+### Step 3 — Run
+```bash
+python3 audit.py --all-devices --clients 2
+```
+
+### Step 4 — Check Results
+```bash
+# Rankings summary
+python3 -c "
+import json
+with open('audit_results/audit_log.json') as f:
+    for e in json.load(f):
+        r = e.get('ranking', {})
+        pos = r.get('position')
+        total = f'/{r[\"total\"]}' if r.get('total') else ''
+        rank = f'#{pos}{total}' if pos else ('mentioned' if r.get('mentioned') else 'not found')
+        print(f'{e[\"platform\"]:12s} | {e[\"keyword\"]:35s} | {rank}')
+"
+```
 
 ---
 
@@ -286,3 +403,10 @@ cd ~/projects/aeo-appium && bash launch_scrcpy.sh
 | Proxy connection fails | Check `.env` has PROXY_PASSWORD. Check provider quota. |
 | DeepSeek key missing | Run `source ~/.zshrc`. Key should be in `~/.zshrc`. |
 | All keywords already done | Run reset command for that flow, then re-run. |
+| OPPO pm clear blocked | Enable "Disable Permission Monitoring" in Developer Options |
+| Redmi adb input blocked | Sign in with Mi account, enable USB debugging (Security Settings) |
+| Device has no internet | Check SocksDroid first (`pm list packages \| grep socks`). Remove if proxy has no GB |
+| Chrome FRE not dismissed | Device may need "Disable Permission Monitoring" for `pm clear` to work |
+| Perplexity query not submitted | CDP focus/submit handles this — check CDP port forwarding works |
+| Device screen turns off | `keep_screen_on()` sets 30min timeout — verify with `settings get system screen_off_timeout` |
+| ADB devices shows (2) suffix | Normal after wireless debug reconnect — code handles this with tab-split parsing |
