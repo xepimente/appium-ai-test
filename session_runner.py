@@ -158,6 +158,9 @@ def run_session(serial: str, full_serial: str, port: int,
     use_adb   = meta.get("use_adb", False)
     backlinks = meta.get("backlinks", [])
     proxy_config = meta.get("proxy", None)
+    if proxy_config:
+        from proxy import enrich_proxy_config
+        proxy_config = enrich_proxy_config(proxy_config, meta)
     platforms = meta.get("platforms", [platform])
 
     lock.acquire()

@@ -51,7 +51,7 @@ while IFS=: read -r device_id port; do
         --port "$port" \
         --base-path "/wd/hub" \
         --log-level "error" \
-        --allow-insecure "uiautomator2:chromedriver_autodownload" \
+        --allow-insecure "uiautomator2:chromedriver_autodownload,uiautomator2:adb_shell" \
         > "$log_file" 2>&1 &
 
     echo "  $device_id  port:$port  log:$log_file  PID:$!"

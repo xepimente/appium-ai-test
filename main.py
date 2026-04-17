@@ -402,6 +402,7 @@ def plan_sessions(max_clients=None):
                     "use_adb":     dev_info.get("use_adb", False),
                     "backlinks":   backlinks,
                     "proxy":       client.get("proxy"),
+                    "address":     client.get("address", ""),
                 })
 
                 device_clients_claimed[did].add(client["id"])

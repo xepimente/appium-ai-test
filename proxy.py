@@ -10,6 +10,7 @@ Proxy stays connected across all 3 platforms within the same session.
 
 import os
 import random
+import re
 import string
 import time
 from pathlib import Path
@@ -46,6 +47,25 @@ PROXY_PASSWORD     = os.environ.get("PROXY_PASSWORD", "")
 def generate_session_id(length: int = 8) -> str:
     """Generate a random session ID for proxy rotation."""
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+def extract_zip_from_address(address: str) -> str:
+    """Extract US zip code (5-digit) from an address string."""
+    m = re.search(r'\b(\d{5})(?:-\d{4})?\b', address)
+    return m.group(1) if m else ""
+
+
+def enrich_proxy_config(proxy_config: Dict[str, Any], client: Dict[str, Any]) -> Dict[str, Any]:
+    """Add zip code to proxy config from client address if not already set."""
+    if not proxy_config:
+        return proxy_config
+    config = dict(proxy_config)
+    if not config.get("zip") and client.get("address"):
+        zip_code = extract_zip_from_address(client["address"])
+        if zip_code:
+            config["zip"] = zip_code
+            print(f"  [Proxy] Auto-set zip={zip_code} from address")
+    return config
 
 
 def build_proxy_credentials(proxy_config: Dict[str, Any]) -> tuple:
@@ -169,6 +189,142 @@ def get_device_ip(serial: str, timeout: int = 20) -> Dict[str, Any]:
         return {"ip": ip}
 
 
+# ── Preflight verification (real IP + proxy IP via Chrome CDP) ────────────────
+
+_REAL_PUBLIC_IP: Optional[str] = None
+
+def get_real_public_ip(timeout: int = 5) -> str:
+    """Return the laptop's real public IP (cached). Used as the 'must not equal'
+    baseline when verifying proxy routing on the phone."""
+    global _REAL_PUBLIC_IP
+    if _REAL_PUBLIC_IP is None:
+        for url in ["https://ifconfig.me/ip", "https://api.ipify.org", "https://icanhazip.com"]:
+            try:
+                r = requests.get(url, timeout=timeout)
+                ip = r.text.strip()
+                if ip and len(ip) <= 45:
+                    _REAL_PUBLIC_IP = ip
+                    break
+            except Exception:
+                continue
+        if _REAL_PUBLIC_IP is None:
+            _REAL_PUBLIC_IP = ""
+    return _REAL_PUBLIC_IP
+
+
+def verify_proxy_via_chrome(serial: str, cdp_port: int = 9222,
+                             timeout: int = 30) -> Dict[str, Any]:
+    """Launch Chrome to ifconfig.me/ip on the device and read the IP back via CDP.
+    Compare to the laptop's real public IP. Returns dict with ok/ip/reason.
+    This is the only reliable way to prove the proxy is actually routing
+    (SocksDroid's tun0 can be up while the route table falls back to wlan0)."""
+    import json as _json
+    import re
+    import subprocess
+    import urllib.request
+    import websocket
+
+    real_ip = get_real_public_ip()
+
+    # Force-stop + launch Chrome to ifconfig.me, then dismiss any FRE (account
+    # screen / welcome) that may be blocking the page load, then re-navigate.
+    # We intentionally do NOT run `pm clear` here — it would wipe Chrome data
+    # every run and force FRE every time. Stale tabs from previous runs are
+    # fine because the page picker below filters by URL.
+    subprocess.run(["adb", "-s", serial, "shell", "am", "force-stop", "com.android.chrome"],
+                   capture_output=True, timeout=10)
+    time.sleep(1)
+    subprocess.run(["adb", "-s", serial, "shell", "am", "start",
+                    "--activity-clear-task", "-a", "android.intent.action.VIEW",
+                    "-d", "https://ifconfig.me/ip", "com.android.chrome"],
+                   capture_output=True, timeout=10)
+    time.sleep(3)
+
+    try:
+        from flows_adb import dismiss_chrome_fre
+        dismiss_chrome_fre(serial)
+        # FRE dismissal may have left Chrome on a blank NTP — re-navigate.
+        subprocess.run(["adb", "-s", serial, "shell", "am", "start",
+                        "-a", "android.intent.action.VIEW",
+                        "-d", "https://ifconfig.me/ip", "com.android.chrome"],
+                       capture_output=True, timeout=10)
+        time.sleep(2)
+    except Exception as e:
+        print(f"  [Preflight] FRE dismiss error (continuing): {e}")
+
+    # Forward CDP port once; use raw /json listing so we can pick the
+    # ifconfig tab explicitly (cdp_connect in screenshot.py prefers AI-platform
+    # URLs and would grab a stale tab).
+    subprocess.run(["adb", "-s", serial, "forward", f"tcp:{cdp_port}",
+                    "localabstract:chrome_devtools_remote"],
+                   capture_output=True, timeout=5)
+
+    start = time.time()
+    ip = None
+    last_err = ""
+    try:
+        while time.time() - start < timeout:
+            time.sleep(2)
+            try:
+                resp = urllib.request.urlopen(f"http://localhost:{cdp_port}/json", timeout=5)
+                pages = _json.loads(resp.read())
+            except Exception as e:
+                last_err = f"json list: {e}"
+                continue
+
+            target = None
+            for p in pages:
+                url = p.get("url", "")
+                if "ifconfig.me" in url and p.get("type") == "page":
+                    target = p
+                    break
+            if not target:
+                last_err = "ifconfig.me tab not found yet"
+                continue
+
+            ws_url = target.get("webSocketDebuggerUrl")
+            if not ws_url:
+                last_err = "no webSocketDebuggerUrl"
+                continue
+
+            try:
+                ws = websocket.create_connection(ws_url, suppress_origin=True, timeout=5)
+                ws.send(_json.dumps({
+                    "id": 1,
+                    "method": "Runtime.evaluate",
+                    "params": {
+                        "expression": "document.body ? document.body.innerText : ''",
+                        "returnByValue": True,
+                    },
+                }))
+                reply = _json.loads(ws.recv())
+                ws.close()
+                text = (reply.get("result", {}).get("result", {}).get("value", "") or "").strip()
+                if text:
+                    m = re.search(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", text)
+                    if m:
+                        ip = m.group(1)
+                        break
+                else:
+                    last_err = "empty body"
+            except Exception as e:
+                last_err = f"ws eval: {e}"
+                continue
+    finally:
+        subprocess.run(["adb", "-s", serial, "forward", "--remove", f"tcp:{cdp_port}"],
+                       capture_output=True, timeout=5)
+
+    if not ip:
+        return {"ok": False, "ip": "", "real_ip": real_ip,
+                "reason": f"could not read ip from chrome ({last_err})"}
+
+    if real_ip and ip == real_ip:
+        return {"ok": False, "ip": ip, "real_ip": real_ip,
+                "reason": f"proxy leak — device showing real IP {ip}"}
+
+    return {"ok": True, "ip": ip, "real_ip": real_ip, "reason": "ok"}
+
+
 # ── Device Manager API ────────────────────────────────────────────────────────
 
 def connect_proxy(serial: str, proxy_config: Dict[str, Any],
@@ -226,10 +382,11 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
 
         if status == "CONNECTED":
             print(f"  [Proxy] Connected successfully")
-            # Wait for VPN to stabilize then check actual IP
+            # Wait for VPN to stabilize. Skipping get_device_ip here because it
+            # hangs on CDP websocket when Chrome isn't open yet; IP check happens
+            # later once Chrome is up.
             time.sleep(3)
-            ip_info = get_device_ip(serial)
-            print(f"  [Proxy] Device IP: {ip_info.get('ip', 'unknown')} ({ip_info.get('city', '?')}, {ip_info.get('region', '?')})")
+            ip_info = {}
         else:
             ip_info = {}
             error = data.get("error", {})

@@ -26,11 +26,38 @@ KEYBOARD_HIDE_WAIT = 10
 
 # ── ADB Helpers ───────────────────────────────────────────────────────────────
 
-def adb(serial, *args, timeout=10):
-    """Run an adb command, return stdout."""
+def _reconnect(serial):
+    """Try to reconnect a device if ADB lost it."""
+    try:
+        subprocess.run(["adb", "connect", serial], capture_output=True, text=True, timeout=5)
+        time.sleep(1)
+    except Exception:
+        pass
+
+
+def adb(serial, *args, timeout=10, retries=2):
+    """Run an adb command with auto-retry on failure."""
     cmd = ["adb", "-s", serial] + list(args)
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    return r.stdout
+    for attempt in range(retries + 1):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            if "error" not in r.stdout.lower() or attempt == retries:
+                return r.stdout
+            _reconnect(serial)
+            time.sleep(1)
+        except subprocess.TimeoutExpired:
+            if attempt < retries:
+                _reconnect(serial)
+                time.sleep(1)
+            else:
+                return ""
+        except Exception:
+            if attempt < retries:
+                _reconnect(serial)
+                time.sleep(1)
+            else:
+                return ""
+    return ""
 
 
 def tap(serial, x, y):
@@ -309,8 +336,9 @@ def adb_scroll(serial, swipes=12, px=400, duration_ms=700, pause_s=2.2):
     w, h = get_screen_size(serial)
     start_y = int(h * 0.7)
     end_y = start_y - px
+    scroll_x = int(w * 0.3)
     for i in range(swipes):
-        swipe(serial, 15, start_y, 15, end_y, duration_ms)
+        swipe(serial, scroll_x, start_y, scroll_x, end_y, duration_ms)
         time.sleep(pause_s)
 
 
@@ -497,12 +525,15 @@ def click_backlink_adb(serial, backlinks, cdp_port=9222):
         ):
             t, rid, desc, x1, y1, x2, y2 = node.groups()
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            combined = f"{t} {desc}".lower()
+            combined = f"{t} {rid} {desc}".lower()
             is_sources = "sources" in combined or "source" in combined
             # Perplexity: small numbered element (citation count) in lower screen
             is_citation_count = (t.strip().isdigit() and int(t.strip()) > 0
-                                 and (x2 - x1) < 100 and y1 > h * 0.4)
+                                 and (x2 - x1) < 150 and y1 > h * 0.4)
             if is_sources or is_citation_count:
+                # Skip invisible/zero-height elements
+                if (y2 - y1) < 5 or (x2 - x1) < 5:
+                    continue
                 cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
                 if cy > h * 0.3:
                     print(f"    Found Sources '{t}' at ({cx},{cy}) — tapping")
@@ -654,10 +685,17 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     find_and_tap(serial, text="No thanks")
     time.sleep(1)
 
-    # Tap input area — find "Ask Gemini" element to avoid hitting mic icon
+    # Tap input area — use left side to avoid mic icon
     print("  Tapping input area...")
     if not find_and_tap(serial, text="Ask Gemini"):
-        tap(serial, w // 2, int(h * 0.75))
+        tap(serial, int(w * 0.3), int(h * 0.75))
+    time.sleep(1)
+    # Dismiss mic permission popup if it appeared
+    find_and_tap(serial, text="Never allow")
+    time.sleep(0.5)
+    # Re-tap input if mic popup stole focus
+    if not find_and_tap(serial, text="Ask Gemini"):
+        tap(serial, int(w * 0.3), int(h * 0.75))
     input_y = int(h * 0.85)
     time.sleep(1)
 
@@ -686,7 +724,16 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     if follow_up and follow_up.strip():
         print("  Typing follow-up...")
         time.sleep(2)
-        tap(serial, w // 2, input_y)
+        # Tap text input — avoid mic icon by targeting left side of input area
+        if not find_and_tap(serial, text="Ask Gemini"):
+            tap(serial, int(w * 0.3), input_y)
+        time.sleep(1)
+        # Dismiss mic permission popup if it appeared
+        find_and_tap(serial, text="Never allow")
+        time.sleep(0.5)
+        # Re-tap input if mic popup stole focus
+        if not find_and_tap(serial, text="Ask Gemini"):
+            tap(serial, int(w * 0.3), input_y)
         time.sleep(1)
         type_text(serial, follow_up)
         time.sleep(1)
@@ -785,16 +832,21 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     navigate_to_url(serial, "www.perplexity.ai", platform="perplexity")
     steps.append("navigated")
 
-    # Dismiss Comet modals by tapping X
+    # Dismiss Comet modals
     print("  Dismissing Comet modals...")
     time.sleep(3)
-    x_pos = int(w * 0.943)
-    y_pos = int(h * 0.134)
-    for attempt in range(2):
-        time.sleep(3)
-        print(f"    Tapping Comet X #{attempt+1} at ({x_pos},{y_pos})")
-        tap(serial, x_pos, y_pos)
-        time.sleep(2)
+    for attempt in range(3):
+        xml = dump_ui(serial)
+        if "Comet" in xml or "Install Comet" in xml:
+            if find_and_tap(serial, content_desc="Close"):
+                print(f"    Dismissed Comet modal #{attempt+1}")
+                time.sleep(2)
+                continue
+            # Fallback: press back
+            press_back(serial)
+            time.sleep(2)
+        else:
+            break
     time.sleep(1)
 
     # Find input

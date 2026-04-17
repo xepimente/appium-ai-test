@@ -102,46 +102,109 @@ def tap_optional(driver, by, value, timeout=3):
         return False
 
 
-def dismiss_first_run_dialogs(driver):
+def dismiss_first_run_dialogs(driver, max_attempts=10):
     """
     Dismiss Chrome first-run experience (FRE) dialogs.
+    Loops up to max_attempts to handle all popups across different brands:
+    - Accept & continue, Use without an account, Stay signed out
+    - Enhanced ad privacy (Got it / ack_button)
+    - "More about ads" — requires scroll before "Got it" works
+    - Google Sign-in "Your device works better"
+    - Notifications (No thanks)
     Must be in NATIVE_APP context.
     """
-    # Screen 1: sign-in prompt
-    tap_optional(driver, AppiumBy.ID,
-                 "com.android.chrome:id/signin_fre_dismiss_button", timeout=5)
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("Use without an account")', timeout=2)
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("Stay signed out")', timeout=2)
+    serial = driver.capabilities.get("udid", "")
 
-    # Screen 2: notifications prompt
-    tap_optional(driver, AppiumBy.ID,
-                 "com.android.chrome:id/negative_button", timeout=3)
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("No thanks")', timeout=2)
+    for attempt in range(max_attempts):
+        handled = False
 
-    # Screen 3: "Enhanced ad privacy in Chrome" — can take a few seconds to appear
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("Got it")', timeout=5)
-    tap_optional(driver, AppiumBy.ID,
-                 'com.android.chrome:id/ack_button', timeout=3)
+        # Accept & continue
+        if tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                        'new UiSelector().text("Accept & continue")', timeout=2):
+            handled = True
+            continue
 
-    # Screen 4: other possible dialogs
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("Accept & continue")', timeout=3)
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("OK")', timeout=2)
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("Continue")', timeout=2)
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("Got it")', timeout=2)
+        # Use without an account / Stay signed out
+        if tap_optional(driver, AppiumBy.ID,
+                        "com.android.chrome:id/signin_fre_dismiss_button", timeout=2):
+            handled = True
+            continue
+        if tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                        'new UiSelector().text("Use without an account")', timeout=2):
+            handled = True
+            continue
+        if tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                        'new UiSelector().text("Stay signed out")', timeout=2):
+            handled = True
+            continue
 
-    # Second pass: some devices show notifications AFTER ad privacy (e.g. Infinix)
-    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
-                 'new UiSelector().text("No thanks")', timeout=3)
-    tap_optional(driver, AppiumBy.ID,
-                 "com.android.chrome:id/negative_button", timeout=2)
+        # "More about ads" — need to scroll down first before "Got it" works
+        try:
+            more_btn = driver.find_element(
+                AppiumBy.ID, "com.android.chrome:id/more_button")
+            if more_btn.is_displayed():
+                # Scroll down via ADB swipe
+                if serial:
+                    subprocess.run(
+                        ["adb", "-s", serial, "shell", "input", "swipe",
+                         "360", "1200", "360", "600", "500"],
+                        capture_output=True, timeout=5,
+                    )
+                else:
+                    driver.swipe(360, 1200, 360, 600, 500)
+                time.sleep(1)
+                handled = True
+                continue
+        except (NoSuchElementException, StaleElementReferenceException):
+            pass
+
+        # Got it / ack_button (ad privacy)
+        if tap_optional(driver, AppiumBy.ID,
+                        'com.android.chrome:id/ack_button', timeout=2):
+            handled = True
+            continue
+        if tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                        'new UiSelector().text("Got it")', timeout=2):
+            handled = True
+            continue
+
+        # Google Sign-in: "Your device works better"
+        try:
+            page = driver.page_source
+            if "works better" in page or "Your device works" in page:
+                if not tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                                    'new UiSelector().text("No thanks")', timeout=2):
+                    tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                                 'new UiSelector().description("Close")', timeout=2)
+                handled = True
+                continue
+        except Exception:
+            pass
+
+        # No thanks (notifications)
+        if tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                        'new UiSelector().text("No thanks")', timeout=2):
+            handled = True
+            continue
+        if tap_optional(driver, AppiumBy.ID,
+                        "com.android.chrome:id/negative_button", timeout=2):
+            handled = True
+            continue
+
+        # OK / Continue
+        if tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                        'new UiSelector().text("OK")', timeout=1):
+            handled = True
+            continue
+        if tap_optional(driver, AppiumBy.ANDROID_UIAUTOMATOR,
+                        'new UiSelector().text("Continue")', timeout=1):
+            handled = True
+            continue
+
+        # Nothing matched — FRE is done
+        if not handled:
+            break
+
     time.sleep(0.5)
 
 

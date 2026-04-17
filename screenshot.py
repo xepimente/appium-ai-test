@@ -44,9 +44,14 @@ def get_screen_size(serial):
 def take_screenshot(serial, output_path=None):
     """
     Take a single screenshot of what's currently visible on screen.
+    Retries up to 3 times if screenshot is empty.
     Returns PNG bytes.
     """
-    raw = adb_raw(serial, "exec-out", "screencap", "-p")
+    for attempt in range(3):
+        raw = adb_raw(serial, "exec-out", "screencap", "-p")
+        if raw and len(raw) > 100:
+            break
+        time.sleep(2)
     if output_path:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "wb") as f:

@@ -24,18 +24,20 @@ Usage:
 """
 
 import argparse
+import csv
 import json
 import os
 import re
 import subprocess
+import threading
 import time
 
 from screenshot import take_screenshot, scroll_response_to_top, extract_response_text, get_screen_size
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-OUTPUT_DIR = "audit_results"
-LOG_FILE = os.path.join(OUTPUT_DIR, "audit_log.json")
+OUTPUT_DIR = os.environ.get("AUDIT_OUTPUT_DIR", "audit_results")
+LOG_FILE = os.path.join(OUTPUT_DIR, "audit_log.csv")
 PLATFORMS = ["Gemini", "ChatGPT", "Perplexity"]
 
 # Concise prompt — forces a short response that fits in 1 mobile screen
@@ -43,9 +45,11 @@ AUDIT_PROMPT_TEMPLATE = (
     "Top 3 businesses for {keyword} in {city}, {state}. "
     "Format: numbered list, each entry: name, 2-3 sentence description of why they stand out, "
     "and whether they appear on Google Maps (yes/no). "
-    "After the list, rank {biz_name} ({biz_url}) with a specific position number "
-    "out of all businesses in this space (e.g., #5 out of 20, #12 out of 30). "
-    "Explain briefly why it holds that rank. "
+    "Do not include any maps, images, or embedded content — text only. "
+    "After the list, rank {biz_name} ({biz_url}) among all businesses in this space. "
+    "You MUST include this exact line on its own: [RANK: X/Y] "
+    "where X is the position and Y is total businesses (e.g., [RANK: 7/25]). "
+    "Then one sentence explaining why. "
     "Keep entire response under 200 words."
 )
 
@@ -178,16 +182,31 @@ def extract_ranking(response_text, biz_name, biz_url=""):
                 return True
         return False
 
-    # First: look for explicit rank statement like "#18 out of 50+" or "Rank: #12"
+    # First: look for [RANK: X/Y] template format (most reliable)
+    # Scan in reverse so the actual rank (at end of response) wins over
+    # the example in the prompt echo (e.g., [RANK: 7/25])
+    for line in reversed(lines):
+        stripped = line.strip()
+        # Skip lines that are clearly the prompt/example
+        if "e.g." in stripped.lower() or "example" in stripped.lower() or "where X" in stripped:
+            continue
+        rank_tag = re.search(r'\[RANK:\s*(\d+)\s*/\s*(\d+\+?)\]', stripped)
+        if rank_tag:
+            position = int(rank_tag.group(1))
+            total = rank_tag.group(2)
+            context = stripped[:200]
+            return {"position": position, "total": total, "mentioned": True, "context": context}
+
+    # Second: look for explicit rank statement like "#18 out of 50+" or "Rank: #12"
     for line in lines:
         stripped = line.strip()
         if (not matches_biz(stripped)
                 and not re.search(r'#\d+\s*(?:out of|/)', stripped)
                 and not re.search(r'(?:rank|ranked|ranks|position)[:\s]*#?\d+', stripped, re.IGNORECASE)):
             continue
-        rank_match = re.search(r'#(\d+)\s*(?:out of|/)\s*~?(\d+\+?)', stripped)
+        rank_match = re.search(r'#(\d+)\s*(?:out of|/)\s*(?:approximately|approx\.?|about|around|roughly|~)?\s*(\d+\+?)', stripped)
         if not rank_match:
-            rank_match = re.search(r'(?:rank|ranked|ranks|position)[:\s]*#?(\d+)\s*(?:out of|/)\s*~?(\d+\+?)', stripped, re.IGNORECASE)
+            rank_match = re.search(r'(?:rank|ranked|ranks|position)[:\s]*#?(\d+)\s*(?:out of|/)\s*(?:approximately|approx\.?|about|around|roughly|~)?\s*(\d+\+?)', stripped, re.IGNORECASE)
         if not rank_match:
             rank_match = re.search(r'(?:rank|ranked|ranks|position)[:\s]*#?(\d+)', stripped, re.IGNORECASE)
         if rank_match:
@@ -244,61 +263,64 @@ def extract_ranking(response_text, biz_name, biz_url=""):
     }
 
 
-def load_log():
-    """Load the audit log."""
-    if os.path.exists(LOG_FILE):
-        try:
-            with open(LOG_FILE) as f:
-                content = f.read().strip()
-                if content:
-                    return json.loads(content)
-        except (json.JSONDecodeError, ValueError):
-            pass
-    return []
+CSV_COLUMNS = [
+    "timestamp", "client_id", "biz_name", "campaign_id", "campaign_name",
+    "keyword", "platform", "mode", "device", "status", "duration_s",
+    "rank_position", "rank_total", "mentioned", "rank_context",
+    "screenshot", "response_text", "error",
+    "proxy_ip", "proxy_city", "proxy_region", "proxy_zip",
+]
+
+_csv_lock = threading.Lock()
 
 
-def save_log(entries):
-    """Save the audit log."""
+def _ensure_csv_header():
+    """Create CSV with header if it doesn't exist."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(LOG_FILE, "w") as f:
-        json.dump(entries, f, indent=2)
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(CSV_COLUMNS)
 
 
 def log_entry(client, keyword, platform, mode, device, status, screenshot_path, text_path,
               error=None, proxy_info=None, duration_s=None, ranking=None):
-    """Add an entry to the audit log."""
-    entries = load_log()
-    entry = {
+    """Append one row to the audit CSV log."""
+    ranking = ranking or {}
+    proxy_info = proxy_info or {}
+
+    row = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "client_id": client.get("id", 0),
         "biz_name": client.get("biz_name", ""),
+        "campaign_id": client.get("campaign_id", "") or client.get("aeo_plan_id", ""),
+        "campaign_name": client.get("campaign_name", "") or client.get("plan_name", ""),
         "keyword": keyword,
         "platform": platform,
         "mode": mode,
-        "device": device,
+        "device": device[:40],
         "status": status,
+        "duration_s": duration_s or "",
+        "rank_position": ranking.get("position", ""),
+        "rank_total": ranking.get("total", ""),
+        "mentioned": "yes" if ranking.get("mentioned") else "",
+        "rank_context": (ranking.get("context") or "")[:100],
         "screenshot": screenshot_path,
         "response_text": text_path,
+        "error": (error or "")[:200],
+        "proxy_ip": proxy_info.get("ip", ""),
+        "proxy_city": proxy_info.get("ip_city", ""),
+        "proxy_region": proxy_info.get("ip_region", ""),
+        "proxy_zip": proxy_info.get("ip_zip", ""),
     }
-    if error:
-        entry["error"] = error
-    if duration_s is not None:
-        entry["duration_s"] = duration_s
-    if ranking:
-        entry["ranking"] = ranking
-    if proxy_info:
-        entry["proxy"] = {
-            "status":     proxy_info.get("status"),
-            "username":   proxy_info.get("username"),
-            "ip":         proxy_info.get("ip"),
-            "ip_city":    proxy_info.get("ip_city"),
-            "ip_region":  proxy_info.get("ip_region"),
-            "ip_country": proxy_info.get("ip_country"),
-            "ip_zip":     proxy_info.get("ip_zip"),
-        }
-    entries.append(entry)
-    save_log(entries)
-    return entry
+
+    with _csv_lock:
+        _ensure_csv_header()
+        with open(LOG_FILE, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+            writer.writerow(row)
+
+    return row
 
 
 # ── ADB Imports ──────────────────────────────────────────────────────────────
@@ -377,14 +399,20 @@ def dismiss_gemini_banner_appium(serial):
 
 
 def dismiss_perplexity_comet_adb(serial):
-    """Dismiss Perplexity Comet modal via coordinate tap."""
-    w, h = adb_screen_size(serial)
-    x_pos = int(w * 0.943)
-    y_pos = int(h * 0.134)
-    for _ in range(2):
+    """Dismiss Perplexity Comet modal via Close button."""
+    from flows_adb import press_back
+    for _ in range(3):
         time.sleep(2)
-        tap(serial, x_pos, y_pos)
-        time.sleep(1)
+        xml = dump_ui(serial)
+        if "Comet" in xml or "Install Comet" in xml:
+            if find_and_tap(serial, content_desc="Close"):
+                print("    Dismissed Comet modal")
+                time.sleep(1)
+                continue
+            press_back(serial)
+            time.sleep(1)
+        else:
+            break
 
 
 # ── File Naming ──────────────────────────────────────────────────────────────
@@ -446,10 +474,16 @@ def audit_gemini_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=Tr
         time.sleep(1)
         dismiss_gemini_banner_adb(serial)
 
-    # Type + send — find "Ask Gemini" element to avoid hitting mic icon
+    # Type + send — tap left side to avoid mic icon
     w, h = adb_screen_size(serial)
     if not find_and_tap(serial, text="Ask Gemini"):
-        tap(serial, w // 2, int(h * 0.75))
+        tap(serial, int(w * 0.3), int(h * 0.75))
+    time.sleep(1)
+    # Dismiss mic permission popup if it appeared
+    find_and_tap(serial, text="Never allow")
+    time.sleep(0.5)
+    if not find_and_tap(serial, text="Ask Gemini"):
+        tap(serial, int(w * 0.3), int(h * 0.75))
     time.sleep(1)
     type_text(serial, prompt)
     time.sleep(1)
@@ -503,6 +537,23 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=T
     wait_for_page_ready(serial, platform="chatgpt")
     time.sleep(3)
 
+    # Check for login redirect — if auth.openai.com, go back to chatgpt.com
+    # Check twice with a delay to catch delayed redirects
+    for login_check in range(2):
+        xml = dump_ui(serial)
+        if "Log in or sign up" in xml or "auth.openai" in xml or "Email address" in xml or "Continue with Google" in xml:
+            print("    ChatGPT login redirect detected — re-navigating...")
+            adb(serial, "shell", "am", "force-stop", "com.android.chrome")
+            time.sleep(2)
+            adb(serial, "shell", "am", "start", "--activity-clear-task",
+                "-a", "android.intent.action.VIEW",
+                "-d", "https://chatgpt.com", "com.android.chrome")
+            wait_for_page_ready(serial, platform="chatgpt")
+            time.sleep(3)
+            break
+        if login_check == 0:
+            time.sleep(3)
+
     # Type + send
     w, h = adb_screen_size(serial)
     if not find_and_tap(serial, resource_id="prompt-textarea"):
@@ -535,6 +586,17 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=T
             var text = el.textContent || '';
             if (text.indexOf('Privacy Policy') > -1 && text.indexOf('Don\\'t share') > -1
                 && el.offsetHeight < 300) { el.remove(); }
+        });
+        // Remove maps/iframes that take up screen space
+        document.querySelectorAll('iframe, .mapboxgl-map, [class*="map"], [data-testid*="map"]').forEach(function(el) {
+            el.remove();
+        });
+        // Remove map containers (div with mapbox/leaflet canvas)
+        document.querySelectorAll('canvas').forEach(function(el) {
+            var parent = el.closest('div');
+            if (parent && parent.offsetHeight > 100 && parent.offsetHeight < 500) {
+                parent.remove();
+            }
         });
     """, use_css_font=True)
     # Scroll AFTER font resize so position is correct
@@ -1009,7 +1071,6 @@ def main():
 
     # ── All-devices parallel mode ──
     if args.all_devices:
-        import threading
         import random
 
         # Discover devices
@@ -1087,26 +1148,57 @@ def main():
             # Keep screen on for the entire audit
             keep_screen_on(dev["serial"])
 
+            from proxy import verify_proxy_via_chrome
+
             for job_idx, job in enumerate(queue):
                 client = job["client"]
                 proxy_config = client.get("proxy")
+                if proxy_config:
+                    from proxy import enrich_proxy_config
+                    proxy_config = enrich_proxy_config(proxy_config, client)
                 proxy_info = None
 
-                # Setup proxy per keyword (new session ID = new IP)
+                # Setup proxy per keyword (new session ID = new IP) + preflight verify
                 if proxy_config:
-                    if job_idx > 0:
-                        try:
-                            teardown_device(dev["serial"])
-                        except Exception:
-                            pass
-                        time.sleep(2)
+                    preflight_ok = False
+                    for preflight_attempt in (1, 2):
+                        if job_idx > 0 or preflight_attempt > 1:
+                            try:
+                                teardown_device(dev["serial"])
+                            except Exception:
+                                pass
+                            time.sleep(2)
 
-                    print(f"\n[{dev['brand']}] Setting up proxy for {client['biz_name']} | {job['keyword'][:30]}...")
-                    device_setup = setup_device(dev["serial"], proxy_config)
-                    proxy_info = device_setup.get("proxy", {})
-                    time.sleep(3)
+                        print(f"\n[{dev['brand']}] Setting up proxy for {client['biz_name']} | {job['keyword'][:30]}... (attempt {preflight_attempt}/2)")
+                        device_setup = setup_device(dev["serial"], proxy_config)
+                        proxy_info = device_setup.get("proxy", {})
+                        time.sleep(3)
 
-                # Run all platforms for this keyword under same proxy
+                        # Preflight: launch Chrome to ifconfig.me and verify the IP
+                        # returned is NOT the laptop's real public IP. Catches silent
+                        # VPN-drop / IP-leak where tun0 is down and wlan0 takes over.
+                        verify = verify_proxy_via_chrome(dev["serial"], cdp_port=cdp_port, timeout=30)
+                        if verify.get("ok"):
+                            print(f"  [Preflight] OK — device IP {verify['ip']} (real IP was {verify.get('real_ip','?')})")
+                            proxy_info["verified_ip"] = verify["ip"]
+                            preflight_ok = True
+                            break
+                        print(f"  [Preflight] FAILED ({preflight_attempt}/2): {verify.get('reason','?')}")
+
+                    if not preflight_ok:
+                        print(f"[{dev['brand']}] SKIPPING keyword — proxy preflight failed after 2 attempts")
+                        with results_lock:
+                            all_results.append({
+                                "status": "error",
+                                "error": "proxy_preflight_failed",
+                                "device": dev["serial"],
+                                "keyword": job["keyword"],
+                                "client": client.get("biz_name", ""),
+                            })
+                        continue
+
+                # Run all platforms for this keyword — always clear Chrome first
+                # (is_first=True) so cookies/history don't carry over between platforms.
                 for plat_idx, plat in enumerate(job["platforms"]):
                     print(f"\n[{dev['brand']} {dev['model']}] {plat} — "
                           f"{client['biz_name']} | {job['keyword'][:30]}")
@@ -1118,7 +1210,7 @@ def main():
                         mode="adb",
                         cdp_port=cdp_port,
                         proxy_info=proxy_info,
-                        is_first=(job_idx == 0 and plat_idx == 0),
+                        is_first=True,
                     )
                     with results_lock:
                         all_results.append(r)
@@ -1135,7 +1227,7 @@ def main():
         for dev_idx, queue in device_queues.items():
             if not queue:
                 continue
-            cdp_port = 9222 + dev_idx
+            cdp_port = int(os.environ.get("AUDIT_CDP_BASE", "9222")) + dev_idx
             t = threading.Thread(
                 target=device_worker,
                 args=(dev_idx, device_info[dev_idx], queue, cdp_port),
@@ -1189,6 +1281,9 @@ def main():
             continue
 
         proxy_config = client.get("proxy")
+        if proxy_config:
+            from proxy import enrich_proxy_config
+            proxy_config = enrich_proxy_config(proxy_config, client)
 
         kw_idx = min(args.keyword_index, len(raw_kws) - 1)
         kw_entry = raw_kws[kw_idx]
