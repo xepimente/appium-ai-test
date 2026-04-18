@@ -291,33 +291,112 @@ def type_text(serial, text):
         time.sleep(0.02)
 
 
-def hide_keyboard_and_submit(serial):
-    """Find Submit button and tap it. If not found, hide keyboard and retry."""
-    # Tap Submit wherever it is — don't wait for specific position
-    result = find_element(serial, text="Submit") or find_element(serial, content_desc="Submit")
-    if result:
-        cx, cy, _, _ = result
-        print(f"    Submit found at ({cx},{cy}) — tapping")
-        tap(serial, cx, cy)
-        time.sleep(1)
-        return
+def _input_still_has_text(serial, min_len: int = 20) -> bool:
+    """Return True if the ask-input / prompt textarea still contains text
+    (meaning the submit didn't actually send). Fresh UI dump each call."""
+    xml = dump_ui(serial)
+    # Perplexity: <node ... resource-id="ask-input" ... text="Im looking..." />
+    # ChatGPT:    <node ... resource-id="prompt-textarea" ... text="..." />
+    for m in re.finditer(r'resource-id="(ask-input|prompt-textarea)"[^>]*text="([^"]*)"', xml):
+        if len(m.group(2)) >= min_len:
+            return True
+    # Also fallback: any EditText with lots of text is probably our unsent prompt
+    for m in re.finditer(r'class="android\.widget\.EditText"[^>]*text="([^"]*)"', xml):
+        if len(m.group(1)) >= min_len:
+            return True
+    return False
 
-    # Not found — hide keyboard and retry
-    print("  Hiding keyboard...")
-    hide_keyboard(serial)
-    print("  Waiting for Submit...")
-    for attempt in range(10):
-        result = find_element(serial, text="Submit") or find_element(serial, content_desc="Submit")
+
+# ── Post-submit verification ──────────────────────────────────────────────────
+
+# Known platform-side error banners. Matched against the full UI dump via `in`.
+_PLATFORM_ERROR_PATTERNS = [
+    "Unable to start thread",
+    "This site can't be reached",
+    "This site can\u2019t be reached",
+    "ERR_CONNECTION_RESET",
+    "ERR_NAME_NOT_RESOLVED",
+    "ERR_INTERNET_DISCONNECTED",
+    "Something went wrong",
+    "Error loading",
+    "Rate limit exceeded",
+    "You've reached your free usage limit",
+    "Too many requests",
+]
+
+
+def verify_submit_succeeded(serial, min_text_len: int = 20) -> tuple[bool, str]:
+    """Verify the submit actually landed. Returns (ok, reason).
+
+    reason is "" on success; otherwise a short machine-readable code plus
+    human detail:
+        submit_failed       — input box still contains the prompt
+        platform_error: X   — a platform-side error banner is visible
+    """
+    xml = dump_ui(serial)
+    # 1. Input should be empty (or short) after a real submit
+    for m in re.finditer(r'resource-id="(ask-input|prompt-textarea)"[^>]*text="([^"]*)"', xml):
+        if len(m.group(2)) >= min_text_len:
+            preview = m.group(2)[:60]
+            return False, f"submit_failed: input still contains {preview!r}"
+    # 2. No platform error banners
+    for pat in _PLATFORM_ERROR_PATTERNS:
+        if pat in xml:
+            return False, f"platform_error: {pat}"
+    return True, ""
+
+
+def extract_response_preview(serial, max_chars: int = 200) -> str:
+    """Return a snippet of the AI response for logging/verification. Grabs
+    the largest plausible response text node from the current UI dump."""
+    xml = dump_ui(serial)
+    candidates: list[str] = []
+    # Any text node with > 60 chars is likely response content (not UI chrome)
+    for m in re.finditer(r' text="([^"]{60,})"', xml):
+        candidates.append(m.group(1))
+    if not candidates:
+        return ""
+    # Longest wins — AI responses are typically the longest text on the page
+    longest = max(candidates, key=len)
+    return longest[:max_chars]
+
+
+def hide_keyboard_and_submit(serial, max_attempts: int = 4):
+    """Find the Submit/Send button and tap it. Re-dump + re-tap if the prompt
+    is still in the input after a tap (Chrome WebView's A11y tree can report
+    stale bounds right after typing, causing the first tap to miss).
+    """
+    for attempt in range(1, max_attempts + 1):
+        # Fresh UI dump each attempt
+        result = (
+            find_element(serial, content_desc="Send prompt")
+            or find_element(serial, content_desc="Send message")
+            or find_element(serial, content_desc="Submit")
+            or find_element(serial, content_desc="Send")
+            or find_element(serial, text="Submit")
+            or find_element(serial, text="Send")
+        )
         if result:
             cx, cy, _, _ = result
-            print(f"    Submit ready at ({cx},{cy}) — tapping")
+            print(f"    [attempt {attempt}] Submit found at ({cx},{cy}) — tapping")
             tap(serial, cx, cy)
-            time.sleep(1)
-            return
-        time.sleep(1)
+            time.sleep(3)
+            # Check: did the prompt leave the input box?
+            if not _input_still_has_text(serial):
+                print(f"    [attempt {attempt}] Prompt submitted (input cleared).")
+                return
+            print(f"    [attempt {attempt}] Prompt still in input — retrying...")
+            time.sleep(2)  # extra wait before re-dump for A11y to settle
+            continue
+        # No submit found — hide keyboard + wait + retry
+        print(f"    [attempt {attempt}] Submit not found, hiding keyboard + waiting...")
+        hide_keyboard(serial)
+        time.sleep(2)
+
+    # Last-resort fallback
     print("    Fallback: pressing Enter")
     press_enter(serial)
-    time.sleep(1)
+    time.sleep(2)
 
 
 # ── Scrolling ─────────────────────────────────────────────────────────────────
@@ -714,7 +793,12 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     gen_ok = wait_for_generation(serial)
     if not gen_ok:
         steps.append("generation_timeout")
-        return {"status": "error", "error": "Generation timed out", "steps": steps}
+        return {"status": "error", "error": "generation_timeout: no response", "steps": steps}
+    # Verify the submit actually landed — catches tap-missed and platform errors
+    submit_ok, submit_reason = verify_submit_succeeded(serial)
+    if not submit_ok:
+        steps.append(f"verify_failed:{submit_reason}")
+        return {"status": "error", "error": submit_reason, "steps": steps}
     steps.append("generation_complete")
 
     print("  Scrolling...")
@@ -745,7 +829,11 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
         fu_ok = wait_for_generation(serial)
         if not fu_ok:
             steps.append("followup_timeout")
-            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
+            return {"status": "error", "error": "followup_timeout: no response", "steps": steps}
+        fu_submit_ok, fu_reason = verify_submit_succeeded(serial)
+        if not fu_submit_ok:
+            steps.append(f"followup_verify_failed:{fu_reason}")
+            return {"status": "error", "error": f"followup_{fu_reason}", "steps": steps}
         print("  Scrolling follow-up...")
         adb_scroll(serial)
         steps.append("scrolled_followup")
@@ -756,15 +844,16 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
         if matched:
             steps.append(f"backlink_clicked:{matched}")
 
-    return {"status": "success", "steps": steps}
+    response_preview = extract_response_preview(serial)
+    return {"status": "success", "steps": steps, "response_preview": response_preview}
 
 
 def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
     steps = []
     w, h = get_screen_size(serial)
 
-    # dismiss_chrome_fre(serial)
-    # steps.append("dismissed_fre")
+    dismiss_chrome_fre(serial)
+    steps.append("dismissed_fre")
 
     navigate_to_url(serial, "chatgpt.com", platform="chatgpt")
     steps.append("navigated")
@@ -790,7 +879,11 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
     gen_ok = wait_for_generation(serial)
     if not gen_ok:
         steps.append("generation_timeout")
-        return {"status": "error", "error": "Generation timed out", "steps": steps}
+        return {"status": "error", "error": "generation_timeout: no response", "steps": steps}
+    submit_ok, submit_reason = verify_submit_succeeded(serial)
+    if not submit_ok:
+        steps.append(f"verify_failed:{submit_reason}")
+        return {"status": "error", "error": submit_reason, "steps": steps}
     steps.append("generation_complete")
 
     adb_scroll(serial)
@@ -809,7 +902,11 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
         fu_ok = wait_for_generation(serial)
         if not fu_ok:
             steps.append("followup_timeout")
-            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
+            return {"status": "error", "error": "followup_timeout: no response", "steps": steps}
+        fu_submit_ok, fu_reason = verify_submit_succeeded(serial)
+        if not fu_submit_ok:
+            steps.append(f"followup_verify_failed:{fu_reason}")
+            return {"status": "error", "error": f"followup_{fu_reason}", "steps": steps}
         adb_scroll(serial)
         steps.append("scrolled_followup")
 
@@ -819,15 +916,16 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
         if matched:
             steps.append(f"backlink_clicked:{matched}")
 
-    return {"status": "success", "steps": steps}
+    response_preview = extract_response_preview(serial)
+    return {"status": "success", "steps": steps, "response_preview": response_preview}
 
 
 def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     steps = []
     w, h = get_screen_size(serial)
 
-    # dismiss_chrome_fre(serial)
-    # steps.append("dismissed_fre")
+    dismiss_chrome_fre(serial)
+    steps.append("dismissed_fre")
 
     navigate_to_url(serial, "www.perplexity.ai", platform="perplexity")
     steps.append("navigated")
@@ -849,6 +947,35 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
             break
     time.sleep(1)
 
+    # Dismiss Cookie Policy banner. Two known variants:
+    #   (1) "Necessary Cookies" / "Accept All Cookies"
+    #   (2) "Opt out" / "Got it"
+    # Blocks taps near input otherwise — can accidentally hit the "privacy
+    # policy" link and navigate away.
+    print("  Dismissing Cookie Policy banner...")
+    for _ in range(3):
+        xml = dump_ui(serial)
+        has_banner = ("Cookie Policy" in xml
+                      or "Accept All Cookies" in xml
+                      or "Necessary Cookies" in xml
+                      or ("Got it" in xml and "cookie" in xml.lower())
+                      or ("Opt out" in xml and "cookie" in xml.lower()))
+        if not has_banner:
+            break
+        tapped = (
+            find_and_tap(serial, text="Got it")
+            or find_and_tap(serial, text="Necessary Cookies")
+            or find_and_tap(serial, text="Accept All Cookies")
+            or find_and_tap(serial, text="Accept all cookies")
+            or find_and_tap(serial, text="Accept")
+        )
+        if tapped:
+            print("    Dismissed cookie banner")
+            time.sleep(1)
+        else:
+            break
+    time.sleep(1)
+
     # Find input
     print("  Looking for chat input...")
     if not find_and_tap(serial, resource_id="ask-input"):
@@ -860,7 +987,10 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     print("  Typing prompt...")
     type_text(serial, prompt)
     steps.append("typed_prompt")
-    time.sleep(1)
+    # Wait for Chrome WebView to settle layout + update A11y tree.
+    # Without this, find_element returns stale Submit bounds from the pre-type
+    # state (y≈424 inside the text field) instead of the real arrow (y≈592).
+    time.sleep(5)
 
     # Hide keyboard + Submit
     hide_keyboard_and_submit(serial)
@@ -870,7 +1000,12 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     gen_ok = wait_for_generation(serial)
     if not gen_ok:
         steps.append("generation_timeout")
-        return {"status": "error", "error": "Generation timed out", "steps": steps}
+        return {"status": "error", "error": "generation_timeout: no response", "steps": steps}
+    # Verify the submit actually landed — catches tap-missed and platform errors
+    submit_ok, submit_reason = verify_submit_succeeded(serial)
+    if not submit_ok:
+        steps.append(f"verify_failed:{submit_reason}")
+        return {"status": "error", "error": submit_reason, "steps": steps}
     steps.append("generation_complete")
 
     print("  Scrolling...")
@@ -885,13 +1020,17 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
         time.sleep(1)
         type_text(serial, follow_up)
         steps.append("typed_followup")
-        time.sleep(1)
+        time.sleep(5)  # A11y settle after layout change
         hide_keyboard_and_submit(serial)
         steps.append("sent_followup")
         fu_ok = wait_for_generation(serial)
         if not fu_ok:
             steps.append("followup_timeout")
-            return {"status": "error", "error": "Follow-up generation timed out", "steps": steps}
+            return {"status": "error", "error": "followup_timeout: no response", "steps": steps}
+        fu_submit_ok, fu_reason = verify_submit_succeeded(serial)
+        if not fu_submit_ok:
+            steps.append(f"followup_verify_failed:{fu_reason}")
+            return {"status": "error", "error": f"followup_{fu_reason}", "steps": steps}
         adb_scroll(serial)
         steps.append("scrolled_followup")
 
@@ -901,7 +1040,8 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
         if matched:
             steps.append(f"backlink_clicked:{matched}")
 
-    return {"status": "success", "steps": steps}
+    response_preview = extract_response_preview(serial)
+    return {"status": "success", "steps": steps, "response_preview": response_preview}
 
 
 # ── Flow Dispatcher ────────────────────────────────────────────────────────────

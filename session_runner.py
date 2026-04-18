@@ -110,11 +110,13 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
 
         print(f"[{device_id}] {platform} {'SUCCESS' if success else 'FAILED'} — {duration}s{' — ' + error if error else ''}")
         return {
-            "success":    success,
-            "device_id":  device_id,
-            "platform":   platform,
-            "duration_s": duration,
-            "error":      error,
+            "success":          success,
+            "device_id":        device_id,
+            "platform":         platform,
+            "duration_s":       duration,
+            "error":            error,
+            "steps":            result.get("steps", []),
+            "response_preview": result.get("response_preview", ""),
         }
 
     except Exception as e:
@@ -128,6 +130,7 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
             "platform":   platform,
             "duration_s": duration,
             "error":      err,
+            "steps":      [],
         }
 
     finally:
@@ -172,6 +175,17 @@ def run_session(serial: str, full_serial: str, port: int,
             print(f"[{device_id}] Setting up device (proxy + location + timezone)...")
             device_setup = setup_device(full_serial, proxy_config)
             proxy_info = device_setup.get("proxy", {})
+            # Enrich proxy_info with location + timezone so log_session can record
+            # the randomized GPS and TZ that were mocked for this session.
+            loc = device_setup.get("location") or {}
+            loc_resp = loc.get("response") or {}
+            tz = device_setup.get("timezone") or {}
+            tz_resp = tz.get("response") or {}
+            proxy_info["mocked_latitude"]  = loc_resp.get("latitude")
+            proxy_info["mocked_longitude"] = loc_resp.get("longitude")
+            proxy_info["mocked_timezone"]  = tz_resp.get("timezone")
+            proxy_info["base_latitude"]    = proxy_config.get("latitude")
+            proxy_info["base_longitude"]   = proxy_config.get("longitude")
             if proxy_info.get("status") != "CONNECTED":
                 print(f"[{device_id}] Proxy connection failed — continuing without proxy")
             else:
@@ -200,14 +214,33 @@ def run_session(serial: str, full_serial: str, port: int,
         overall_success = all(r.get("success") for r in platform_results)
         output = f"platforms={len(platforms)} passed={sum(1 for r in platform_results if r.get('success'))}"
 
+        # Flatten the most useful info from per-platform results for the
+        # scheduler/caller. See docs/EXECUTOR_PAYLOAD.md for the full contract.
+        first_error = next(
+            (r.get("error", "") for r in platform_results if not r.get("success")),
+            "",
+        )
+        clicked_step = next(
+            (s for s in all_steps if isinstance(s, str) and s.startswith("backlink_clicked:")),
+            None,
+        )
+        backlink_clicked = clicked_step.split(":", 1)[1] if clicked_step else None
+        response_preview = next(
+            (r.get("response_preview", "") for r in platform_results if r.get("response_preview")),
+            "",
+        )
+
         print(f"[{device_id}] {'ALL PASSED' if overall_success else 'SOME FAILED'} — {output}")
         return {
             "success":          overall_success,
             "device_id":        device_id,
             "output":           output,
+            "error":            first_error,
             "steps":            all_steps,
             "proxy":            proxy_info,
             "platform_results": platform_results,
+            "backlink_clicked": backlink_clicked,
+            "response_preview": response_preview,
         }
 
     except Exception as e:
@@ -232,6 +265,54 @@ def run_session(serial: str, full_serial: str, port: int,
 
         lock.release()
         print(f"[{device_id}] Session done, lock released.")
+
+
+# ── Sequential Runner ──────────────────────────────────────────────────────────
+
+def run_sequential(sessions: List[Dict], on_complete: Optional[Callable] = None) -> List[Dict]:
+    """
+    Run sessions one-at-a-time. Each device connects VPN, runs flow, disconnects
+    before the next device starts. More observable and reliable than parallel,
+    at the cost of total wall time.
+    """
+    results: List[Dict] = []
+    for i, sess in enumerate(sessions, 1):
+        port    = sess.get("port")
+        use_adb = sess.get("use_adb", False)
+        print(f"\n{'='*60}\n[{i}/{len(sessions)}] {sess['device_id']} — {sess['platform']}\n{'='*60}")
+
+        if not port and not use_adb:
+            result = {
+                "success":   False,
+                "device_id": sess["device_id"],
+                "output":    f"No Appium port in session for {sess['device_id']}",
+                "steps":     [],
+            }
+        else:
+            result = run_session(
+                serial      = sess["serial"],
+                full_serial = sess.get("full_serial", sess["serial"]),
+                port        = port or 0,
+                platform    = sess["platform"],
+                prompt      = sess["prompt"],
+                follow_up   = sess.get("follow_up"),
+                device_id   = sess["device_id"],
+                sess_meta   = {
+                    "use_adb":   use_adb,
+                    "backlinks": sess.get("backlinks", []),
+                    "proxy":     sess.get("proxy"),
+                    "platforms": sess.get("platforms", [sess["platform"]]),
+                },
+            )
+
+        results.append(result)
+        if on_complete:
+            try:
+                on_complete(sess, result)
+            except Exception as e:
+                print(f"[{sess['device_id']}] on_complete error: {e}")
+
+    return results
 
 
 # ── Parallel Runner ────────────────────────────────────────────────────────────

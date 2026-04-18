@@ -1,72 +1,37 @@
 {
-  "device-001": {
-    "serial": "192.168.254.204:37811",
-    "port": 4723,
+  "device-101": {
+    "serial": "adb-149145555W006589-2W7yzb (2)._adb-tls-connect._tcp",
+    "port": 4731,
     "use_adb": true,
     "brand": "Infinix",
     "model": "Infinix X6725"
   },
-  "device-002": {
-    "serial": "0B64C27G23101E10",
-    "port": 4725,
-    "use_adb": false,
-    "brand": "realme",
-    "model": "RMX3930"
-  },
-  "device-004": {
-    "serial": "10HFBBFEBZ000RA",
-    "port": 4726,
-    "use_adb": false,
-    "brand": "vivo",
-    "model": "V2430"
-  },
-  "device-005": {
-    "serial": "139517057H002933",
-    "port": 4727,
-    "use_adb": false,
-    "brand": "Itel",
-    "model": "itel A6610L"
-  },
-  "device-006": {
-    "serial": "147263758M001636",
-    "port": 4728,
-    "use_adb": true,
-    "brand": "TECNO",
-    "model": "TECNO KM4k"
-  },
-  "device-007": {
-    "serial": "323952008165",
-    "port": 4730,
-    "use_adb": false,
-    "brand": "nubia",
-    "model": "Z2460"
-  },
-  "device-009": {
-    "serial": "G6TGT4SCTCYTDMDU",
-    "port": 4731,
-    "use_adb": false,
-    "brand": "Redmi",
-    "model": "25078RA3EA"
-  },
-  "device-010": {
-    "serial": "NZNBYL5DE6GIK7VS",
+  "device-102": {
+    "serial": "adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp",
     "port": 4732,
-    "use_adb": false,
-    "brand": "Redmi",
-    "model": "25078RA3EA"
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
   },
-  "device-011": {
-    "serial": "R83L112EVWK",
+  "device-103": {
+    "serial": "adb-149145555W006477-JjonPV (2)._adb-tls-connect._tcp",
     "port": 4733,
-    "use_adb": false,
-    "brand": "samsung",
-    "model": "SM-A075F"
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
   },
-  "device-012": {
-    "serial": "c0897ffc",
+  "device-104": {
+    "serial": "adb-149145555W006788-Vb9M0e._adb-tls-connect._tcp",
     "port": 4734,
     "use_adb": true,
-    "brand": "OPPO",
-    "model": "CPH2773"
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-105": {
+    "serial": "adb-1490455613010287-g9bnc8._adb-tls-connect._tcp",
+    "port": 4735,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
   }
 }

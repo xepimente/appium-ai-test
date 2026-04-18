@@ -176,6 +176,14 @@ def get_device_ip(serial: str, timeout: int = 20) -> Dict[str, Any]:
     try:
         resp = requests.get(f"https://ipinfo.io/{ip}/json", timeout=5)
         info = resp.json()
+        loc = info.get("loc", "")
+        lat, lng = None, None
+        if loc and "," in loc:
+            try:
+                lat_s, lng_s = loc.split(",", 1)
+                lat, lng = float(lat_s), float(lng_s)
+            except ValueError:
+                pass
         return {
             "ip": ip,
             "city": info.get("city", ""),
@@ -184,6 +192,8 @@ def get_device_ip(serial: str, timeout: int = 20) -> Dict[str, Any]:
             "postal": info.get("postal", ""),
             "timezone": info.get("timezone", ""),
             "org": info.get("org", ""),
+            "latitude": lat,
+            "longitude": lng,
         }
     except Exception:
         return {"ip": ip}
@@ -358,17 +368,30 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
     except Exception:
         pass
 
-    username, password = build_proxy_credentials(proxy_config)
+    # gost path — the phone talks to a local SOCKS5 listener on the Mac's LAN,
+    # and gost handles the upstream Decodo tunnel. This avoids each phone holding
+    # its own WAN tunnel on shared WiFi (tun0 flicker under parallel load).
+    gost = proxy_config.get("gost")
+    if gost:
+        target_host = gost["host"]
+        target_port = int(gost["port"])
+        username    = gost.get("username", "anon")
+        password    = gost.get("password", "anon")
+    else:
+        target_host = PROXY_HOST
+        target_port = PROXY_PORT
+        username, password = build_proxy_credentials(proxy_config)
 
     payload = {
         "deviceId": serial,
-        "url": PROXY_HOST,
-        "port": PROXY_PORT,
+        "url":      target_host,
+        "port":     target_port,
         "username": username,
         "password": password,
     }
 
-    print(f"  [Proxy] Connecting {serial[:20]}... → {PROXY_HOST}:{PROXY_PORT}")
+    route = "via gost" if gost else "direct"
+    print(f"  [Proxy] Connecting {serial[:20]}... → {target_host}:{target_port}  ({route})")
     print(f"  [Proxy] Credentials: {username} / {password[:30]}...")
 
     try:
@@ -395,8 +418,8 @@ def connect_proxy(serial: str, proxy_config: Dict[str, Any],
         return {
             "status": status,
             "username": username,
-            "proxy_host": PROXY_HOST,
-            "proxy_port": PROXY_PORT,
+            "proxy_host": target_host,
+            "proxy_port": target_port,
             "ip": ip_info.get("ip"),
             "ip_city": ip_info.get("city"),
             "ip_region": ip_info.get("region"),
@@ -618,15 +641,36 @@ def setup_device(serial: str, proxy_config: Dict[str, Any],
 
     result["proxy"] = proxy_info
 
-    # 2. Set mock location — randomized within 5 miles
+    # 2. Determine lat/lng base for GPS mock.
+    # Prefer pre-configured proxy_config.latitude/longitude. The IP-based geolocation
+    # lookup is only attempted when no config is provided, because get_device_ip()
+    # requires curl or Chrome-with-CDP on the device — neither is available during
+    # initial setup on many Android ROMs (Infinix has no curl, Chrome not yet open).
     lat = proxy_config.get("latitude")
     lng = proxy_config.get("longitude")
+    geo_source = "config"
+    if lat is None or lng is None:
+        try:
+            ip_info = get_device_ip(serial, timeout=10)
+            if ip_info.get("latitude") is not None and ip_info.get("longitude") is not None:
+                lat = ip_info["latitude"]
+                lng = ip_info["longitude"]
+                geo_source = f"proxy IP {ip_info.get('ip','?')} ({ip_info.get('city','')},{ip_info.get('region','')})"
+                proxy_info.setdefault("ip", ip_info.get("ip"))
+                proxy_info.setdefault("ip_city", ip_info.get("city"))
+                proxy_info.setdefault("ip_region", ip_info.get("region"))
+                proxy_info.setdefault("ip_zip", ip_info.get("postal"))
+        except Exception as e:
+            print(f"  [Proxy] get_device_ip failed: {e}")
+
     if lat is not None and lng is not None:
         rand_lat, rand_lng = randomize_location(lat, lng, radius_miles=5.0)
-        print(f"  [Location] Randomized: ({lat}, {lng}) → ({rand_lat}, {rand_lng})")
+        print(f"  [Location] Base from {geo_source}: ({lat}, {lng}) → randomized ±5mi → ({rand_lat}, {rand_lng})")
         result["location"] = set_location(serial, rand_lat, rand_lng)
+    else:
+        print("  [Location] No lat/lng available (no proxy IP geo + no config) — skipping mock")
 
-    # 3. Set timezone (if configured)
+    # 3. Set timezone — from biz location via proxy_config (fixed, not randomized).
     tz = proxy_config.get("timezone")
     if tz:
         result["timezone"] = set_timezone(serial, tz)
