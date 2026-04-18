@@ -1,402 +1,320 @@
-"""
-Main task runner — thin wrapper around existing audit.py, flows_adb.py, and flows.py.
-Does NOT rewrite any flows. Imports and calls the working code directly.
+"""Thin wrapper that turns a Job payload into a call to session_runner.run_session
+and builds a JobResult from the return dict.
 
-Two session modes:
-  - use_adb=True  → ADB-only (flows_adb.run_flow_adb) — for Infinix, TECNO
-  - use_adb=False → Appium   (flows.run_flow)          — for all other brands
+Concurrency model:
+  - Multiple Jobs can run simultaneously (one per device)
+  - Per-device in-flight tracking rejects a 2nd Job on a busy device with a
+    structured `DeviceBusy` error; scheduler is expected to retry elsewhere
+  - When a Job has `proxy`, the runner spins up a per-Job gost listener on a
+    dynamically allocated port and tears it down on finish (matches how
+    run_parallel yesterday produced 5/5 PASS)
+
+See docs/EXECUTOR_PAYLOAD.md for the authoritative Job/JobResult schema.
 """
 
+from __future__ import annotations
+
+import json
 import os
-import subprocess
+import socket
 import sys
+import threading
 import time
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-# Ensure the project root is on the path so we can import audit, flows_adb, etc.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from audit import (
-    audit_gemini_adb,
-    audit_chatgpt_adb,
-    audit_perplexity_adb,
-    build_audit_prompt,
-    extract_ranking,
-    format_response_text,
-)
-from flows_adb import (
-    clear_chrome as clear_chrome_adb,
-    keep_screen_on,
-    run_flow_adb,
-    adb,
-)
-from flows import (
-    clear_chrome as clear_chrome_appium,
-    run_flow as run_flow_appium,
-)
-from screenshot import extract_response_text
-
-from .result import PlatformResult, TaskResult
-
-# Brands that must use ADB-only (Appium crashes on these)
-ADB_ONLY_BRANDS = {"infinix", "tecno"}
-
-BASE_APPIUM_PORT = 4723
+from gost_manager import GostManager, detect_lan_ip
+from session_runner import run_session
 
 
-AUDIT_FLOW_MAP = {
-    "gemini": audit_gemini_adb,
-    "chatgpt": audit_chatgpt_adb,
-    "perplexity": audit_perplexity_adb,
-}
+ACTIVE_DEVICES_PATH = os.path.join(PROJECT_ROOT, "active_devices.json")
+
+GOST_PORT_MIN = 11001
+GOST_PORT_MAX = 12000
 
 
-def _is_device_reachable(serial: str) -> bool:
-    """Check if device is reachable via ADB."""
+# ── Exceptions surfaced to the HTTP layer ─────────────────────────────────────
+
+
+class DeviceBusy(Exception):
+    """Raised when a Job targets a device that's already running a Job."""
+    def __init__(self, device_id: str, holder_job_id: str) -> None:
+        super().__init__(f"device_busy: {device_id} (in use by {holder_job_id})")
+        self.device_id = device_id
+        self.holder_job_id = holder_job_id
+
+
+class NoFreeDevice(Exception):
+    """Raised when auto-pick can't find a device not already running a Job."""
+
+
+class DeviceNotInPool(Exception):
+    """Raised when Job.device_id doesn't match any entry in active_devices.json."""
+
+
+# ── Shared state (thread-safe) ────────────────────────────────────────────────
+
+
+_devices_in_use: Dict[str, str] = {}   # device_id → job_id currently holding it
+_devices_lock = threading.Lock()
+
+_ports_in_use: set = set()
+_ports_lock = threading.Lock()
+
+
+def _allocate_port() -> int:
+    """Pick the lowest free gost port in [GOST_PORT_MIN, GOST_PORT_MAX]. Also
+    probes the OS — catches ports held by non-executor processes."""
+    with _ports_lock:
+        for p in range(GOST_PORT_MIN, GOST_PORT_MAX + 1):
+            if p in _ports_in_use:
+                continue
+            if _port_bindable(p):
+                _ports_in_use.add(p)
+                return p
+    raise RuntimeError(f"no free gost port in [{GOST_PORT_MIN}, {GOST_PORT_MAX}]")
+
+
+def _release_port(port: int) -> None:
+    with _ports_lock:
+        _ports_in_use.discard(port)
+
+
+def _port_bindable(port: int) -> bool:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        import subprocess
-        result = subprocess.run(
-            ["adb", "-s", serial, "shell", "echo", "ok"],
-            capture_output=True, text=True, timeout=5,
-        )
-        return "ok" in result.stdout
-    except Exception:
+        s.bind(("0.0.0.0", port))
+        return True
+    except OSError:
         return False
-
-
-def _run_platform_audit(serial: str, platform: str, prompt: str,
-                        client: Dict, keyword: Dict,
-                        cdp_port: int, is_first: bool) -> PlatformResult:
-    """Run audit on one platform using existing audit.py functions."""
-    platform_lower = platform.lower()
-    platform_start = time.time()
-
-    audit_fn = AUDIT_FLOW_MAP.get(platform_lower)
-    if not audit_fn:
-        return PlatformResult(
-            platform=platform_lower, status="error",
-            error=f"Unknown platform: {platform}",
-            duration_s=round(time.time() - platform_start, 1),
-        )
-
-    try:
-        # Build client dict in the format audit.py expects
-        audit_client = {
-            "id": client.get("id", 0),
-            "biz_name": client.get("name", ""),
-            "biz_url": client.get("url", ""),
-            "keyword": keyword.get("text", ""),
-            "city": keyword.get("city", ""),
-            "state": keyword.get("state", ""),
-        }
-
-        ss_path, text_path, timestamp = audit_fn(
-            serial, audit_client, keyword.get("text", ""),
-            prompt, cdp_port=cdp_port, is_first=is_first,
-        )
-
-        # Read the response text that was saved
-        response_text = ""
-        if os.path.exists(text_path):
-            with open(text_path) as f:
-                response_text = f.read()
-
-        # Extract ranking from the raw text (re-extract from CDP for better accuracy)
-        raw_text = extract_response_text(
-            serial, platform_lower.capitalize(), local_port=cdp_port,
-        )
-        if not raw_text:
-            raw_text = response_text
-
-        formatted_text = format_response_text(raw_text, platform_lower)
-        ranking_data = extract_ranking(
-            raw_text,
-            client.get("name", ""),
-            client.get("url", ""),
-        )
-
-        # Append ranking info to text file
-        with open(text_path, "a") as f:
-            f.write(f"\n\n--- AEO Ranking ---\n")
-            f.write(f"Business: {client.get('name', '')}\n")
-            f.write(f"Keyword: {keyword.get('text', '')}\n")
-            f.write(f"Platform: {platform_lower.capitalize()}\n")
-            f.write(f"Position: {ranking_data['position'] or 'Not ranked'}\n")
-            f.write(f"Mentioned: {'Yes' if ranking_data['mentioned'] else 'No'}\n")
-            f.write(f"Context: {ranking_data['context']}\n")
-
-        return PlatformResult(
-            platform=platform_lower,
-            status="success",
-            steps=["audit_complete"],
-            duration_s=round(time.time() - platform_start, 1),
-            response_text=formatted_text,
-            screenshot_path=ss_path,
-            ranking=ranking_data,
-        )
-
-    except Exception as e:
-        return PlatformResult(
-            platform=platform_lower, status="error",
-            error=f"{type(e).__name__}: {e}",
-            duration_s=round(time.time() - platform_start, 1),
-        )
-
-
-def _run_platform_session_adb(serial: str, platform: str, prompt: str,
-                              follow_up: str, backlinks: List[str],
-                              is_first: bool) -> PlatformResult:
-    """
-    Run session via ADB-only (for Infinix, TECNO).
-    Matches session_runner.py ADB path.
-    """
-    platform_lower = platform.lower()
-    platform_cap = platform_lower.capitalize()
-    if platform_lower == "chatgpt":
-        platform_cap = "ChatGPT"
-    platform_start = time.time()
-
-    try:
-        if is_first:
-            clear_chrome_adb(serial)
-            time.sleep(1)
-            subprocess.run(
-                ["adb", "-s", serial, "shell", "am", "start", "-n",
-                 "com.android.chrome/com.google.android.apps.chrome.Main"],
-                capture_output=True, timeout=10,
-            )
-            time.sleep(3)
-
-        result = run_flow_adb(platform_cap, serial, prompt, follow_up,
-                              backlinks=backlinks)
-
-        success = result.get("status") == "success"
-        return PlatformResult(
-            platform=platform_lower,
-            status="success" if success else "error",
-            steps=result.get("steps", []),
-            duration_s=round(time.time() - platform_start, 1),
-            error=result.get("error") if not success else None,
-        )
-
-    except Exception as e:
-        return PlatformResult(
-            platform=platform_lower, status="error",
-            error=f"{type(e).__name__}: {e}",
-            duration_s=round(time.time() - platform_start, 1),
-        )
-
-
-def _run_platform_session_appium(serial: str, full_serial: str, platform: str,
-                                 prompt: str, follow_up: str, backlinks: List[str],
-                                 is_first: bool, port: int = BASE_APPIUM_PORT) -> PlatformResult:
-    """
-    Run session via Appium (for Samsung, OPPO, Redmi, Realme, Vivo, etc.).
-    Matches session_runner.py Appium path.
-
-    serial: short serial for Appium device_name (e.g., "c0897ffc")
-    full_serial: full ADB transport for ADB commands (e.g., "adb-c0897ffc-...")
-    """
-    from appium import webdriver
-    from appium.options.android.uiautomator2.base import UiAutomator2Options
-
-    platform_lower = platform.lower()
-    platform_cap = platform_lower.capitalize()
-    if platform_lower == "chatgpt":
-        platform_cap = "ChatGPT"
-    platform_start = time.time()
-    driver = None
-
-    try:
-        if is_first:
-            clear_chrome_appium(full_serial)
-            time.sleep(1)
-            # Lock portrait
-            subprocess.run(
-                ["adb", "-s", full_serial, "shell", "settings", "put", "system",
-                 "accelerometer_rotation", "0"],
-                capture_output=True, timeout=5,
-            )
-            subprocess.run(
-                ["adb", "-s", full_serial, "shell", "settings", "put", "system",
-                 "user_rotation", "0"],
-                capture_output=True, timeout=5,
-            )
-
-        options = UiAutomator2Options()
-        options.platform_name = "Android"
-        options.device_name = serial
-        # Skip udid if transport has (2) — Appium can't parse spaces/parens
-        if " " not in full_serial and "(" not in full_serial:
-            options.udid = full_serial
-        options.automation_name = "UiAutomator2"
-        options.no_reset = not is_first
-        options.new_command_timeout = 300
-        options.orientation = "PORTRAIT"
-        options.app_package = "com.android.chrome"
-        options.app_activity = "com.google.android.apps.chrome.Main"
-        options.set_capability("appium:chromeOptions", {"args": []})
-        options.set_capability("appium:chromedriverAutodownload", True)
-
-        appium_url = f"http://localhost:{port}/wd/hub"
-        print(f"  Connecting to Appium at {appium_url} ({platform_cap})...")
-        driver = webdriver.Remote(appium_url, options=options)
-        driver.implicitly_wait(5)
-
-        result = run_flow_appium(platform_cap, driver, full_serial, prompt,
-                                follow_up, backlinks=backlinks)
-
-        success = result.get("status") == "success"
-        return PlatformResult(
-            platform=platform_lower,
-            status="success" if success else "error",
-            steps=result.get("steps", []),
-            duration_s=round(time.time() - platform_start, 1),
-            error=result.get("error") if not success else None,
-        )
-
-    except Exception as e:
-        return PlatformResult(
-            platform=platform_lower, status="error",
-            error=f"{type(e).__name__}: {e}",
-            duration_s=round(time.time() - platform_start, 1),
-        )
     finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception:
-                pass
+        s.close()
 
 
-def _detect_brand(serial: str) -> str:
-    """Get the device brand via ADB."""
+# ── Device pool ───────────────────────────────────────────────────────────────
+
+
+def _load_device_pool() -> Dict[str, Dict[str, Any]]:
+    with open(ACTIVE_DEVICES_PATH) as f:
+        return json.load(f)
+
+
+def device_pool_size() -> int:
     try:
-        result = subprocess.run(
-            ["adb", "-s", serial, "shell", "getprop", "ro.product.brand"],
-            capture_output=True, text=True, timeout=5,
-        )
-        return result.stdout.strip().lower()
+        return len(_load_device_pool())
     except Exception:
-        return ""
+        return 0
 
 
-def execute_task(payload: Dict[str, Any]) -> TaskResult:
+def devices_available() -> int:
+    with _devices_lock:
+        in_use = set(_devices_in_use.keys())
+    return max(0, device_pool_size() - len(in_use))
+
+
+def in_flight_jobs() -> List[Dict[str, str]]:
+    """Return a snapshot of currently-running jobs keyed by device_id."""
+    with _devices_lock:
+        return [{"device_id": did, "job_id": jid} for did, jid in _devices_in_use.items()]
+
+
+def _claim_device(device_id_hint: Optional[str], job_id: str) -> Tuple[str, Dict[str, Any]]:
+    """Pick a device and mark it in-flight atomically. Raises DeviceBusy /
+    NoFreeDevice / DeviceNotInPool on failure."""
+    pool = _load_device_pool()
+    if not pool:
+        raise NoFreeDevice("active_devices.json is empty")
+
+    with _devices_lock:
+        if device_id_hint:
+            if device_id_hint not in pool:
+                raise DeviceNotInPool(
+                    f"device_id {device_id_hint!r} not in pool (have: {list(pool.keys())})"
+                )
+            if device_id_hint in _devices_in_use:
+                raise DeviceBusy(device_id_hint, _devices_in_use[device_id_hint])
+            _devices_in_use[device_id_hint] = job_id
+            return device_id_hint, pool[device_id_hint]
+
+        # Auto-pick: first pool entry not currently in use
+        for did, info in pool.items():
+            if did not in _devices_in_use:
+                _devices_in_use[did] = job_id
+                return did, info
+        raise NoFreeDevice(f"all {len(pool)} devices currently in use")
+
+
+def _release_device(device_id: str) -> None:
+    with _devices_lock:
+        _devices_in_use.pop(device_id, None)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _derive_short_serial(full_serial: str) -> str:
+    """`adb-c0897ffc-XYZ._adb-tls-connect._tcp` → `c0897ffc`. Falls back to
+    full_serial if the transport shape is unexpected."""
+    if full_serial.startswith("adb-") and "_adb-tls-connect" in full_serial:
+        inner = full_serial[4:].split("._adb-tls-connect")[0]
+        return inner.rsplit("-", 1)[0]
+    return full_serial
+
+
+def _proxy_dict_from_job(proxy) -> Optional[Dict[str, Any]]:
+    if proxy is None:
+        return None
+    if hasattr(proxy, "model_dump"):
+        return proxy.model_dump(exclude_none=True)
+    return dict(proxy)
+
+
+def _build_proxy_resolved(result_proxy: Optional[Dict[str, Any]],
+                          gost_endpoint: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not result_proxy and not gost_endpoint:
+        return None
+    info = result_proxy or {}
+    return {
+        "status":           info.get("status", "UNKNOWN"),
+        "gost_endpoint":    gost_endpoint,
+        "upstream_session": info.get("username"),
+        "exit_ip":          info.get("ip"),
+        "exit_city":        info.get("ip_city"),
+        "exit_region":      info.get("ip_region"),
+        "exit_zip":         info.get("ip_zip"),
+        "mocked_latitude":  info.get("mocked_latitude"),
+        "mocked_longitude": info.get("mocked_longitude"),
+        "mocked_timezone":  info.get("mocked_timezone"),
+    }
+
+
+def _iso_utc() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _error_result(job: Dict[str, Any], started_at: str, t0: float,
+                  device_id: Optional[str], device_serial: Optional[str],
+                  error: str) -> Dict[str, Any]:
+    return {
+        **job,
+        "device_id":        device_id,
+        "device_serial":    device_serial,
+        "status":           "error",
+        "error":            error,
+        "started_at":       started_at,
+        "finished_at":      _iso_utc(),
+        "duration_s":       round(time.time() - t0, 2),
+        "proxy_resolved":   None,
+        "response_preview": None,
+        "backlink_clicked": None,
+        "steps":            [],
+    }
+
+
+# ── Main entry point ──────────────────────────────────────────────────────────
+
+
+def execute_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Run one Job and return a JobResult dict.
+
+    Raises DeviceBusy / NoFreeDevice / DeviceNotInPool up to the route layer
+    (which maps them to 409/400). Any other failure is captured inside the
+    result with status='error' + a descriptive error code.
     """
-    Execute a phone automation task.
+    started_at = _iso_utc()
+    t0 = time.time()
 
-    payload keys:
-      - type: "audit" | "session"
-      - device_serial: str
-      - platforms: list[str]
-      - client: { name, url, id? }
-      - keyword: { text, city, state, id? }
-      - prompt: str (session: LLM-generated, audit: auto-built if empty)
-      - follow_up: str (session only)
-      - backlinks: list[str] (session only)
-      - use_adb: bool (optional, auto-detected from brand if not set)
-      - port: int (Appium port, default 4723)
-    """
-    task_start = time.time()
-    task_type = payload.get("type", "session")
-    device_serial = payload.get("device_serial", "")
-    platforms = payload.get("platforms", ["gemini", "chatgpt", "perplexity"])
-    client = payload.get("client", {})
-    keyword = payload.get("keyword", {})
-    cdp_port = 9222
+    # Claim a device (raises exceptions the route handler surfaces as HTTP errors)
+    device_id, dev = _claim_device(job.get("device_id"), job["job_id"])
 
-    # Validate device
-    if not _is_device_reachable(device_serial):
-        return TaskResult(
-            status="failed", task_type=task_type, device_serial=device_serial,
-            error="device_unreachable",
-            duration_seconds=round(time.time() - task_start, 1),
-        )
+    full_serial   = dev["serial"]
+    short_serial  = _derive_short_serial(full_serial)
+    port          = dev.get("port", 0)
+    use_adb       = dev.get("use_adb", True)
 
-    # Short serial for Appium (e.g., "c0897ffc")
-    short_serial = payload.get("serial", "")
-    if not short_serial:
-        # Derive from full transport: "adb-c0897ffc-XXX._adb-tls-connect._tcp" → "c0897ffc"
-        if device_serial.startswith("adb-") and "_adb-tls-connect" in device_serial:
-            inner = device_serial[4:]
-            inner = inner.split("._adb-tls-connect")[0]
-            short_serial = inner.rsplit("-", 1)[0]
-        else:
-            short_serial = device_serial
+    proxy_config  = _proxy_dict_from_job(job.get("proxy"))
+    gost_endpoint: Optional[str] = None
+    gost_port:     Optional[int] = None
+    gm:            Optional[GostManager] = None
 
-    # Detect ADB-only vs Appium
-    use_adb = payload.get("use_adb")
-    if use_adb is None:
-        brand = _detect_brand(device_serial)
-        use_adb = brand in ADB_ONLY_BRANDS
-        print(f"  Brand: {brand} → {'ADB-only' if use_adb else 'Appium'}")
+    try:
+        # ── Per-Job gost when proxy is requested ─────────────────────────────
+        if proxy_config:
+            try:
+                gost_port = _allocate_port()
+            except Exception as e:
+                return _error_result(job, started_at, t0, device_id, full_serial,
+                                     f"gost_port_alloc_failed: {e}")
 
-    appium_port = payload.get("port", BASE_APPIUM_PORT)
+            gm_spec = [{
+                "device_id":        device_id,
+                "zip":              proxy_config.get("zip", "10001"),
+                "country":          proxy_config.get("country", "us"),
+                "session_duration": int(proxy_config.get("session_duration", 30)),
+            }]
+            try:
+                gm = GostManager(gm_spec, base_port=gost_port)
+                gm.start()
+            except Exception as e:
+                _release_port(gost_port)
+                return _error_result(job, started_at, t0, device_id, full_serial,
+                                     f"gost_start_failed: {e}")
 
-    # Keep screen on
-    keep_screen_on(device_serial)
+            mapping = gm.mapping[device_id]
+            gost_endpoint = f"{mapping['host']}:{mapping['port']}"
+            proxy_config["gost"] = mapping
 
-    # Build prompt
-    prompt = payload.get("prompt", "")
-    if not prompt and task_type == "audit":
-        audit_client = {
-            "keyword": keyword.get("text", ""),
-            "city": keyword.get("city", ""),
-            "state": keyword.get("state", ""),
-            "biz_name": client.get("name", ""),
-            "biz_url": client.get("url", ""),
+        # ── Build sess_meta and delegate ─────────────────────────────────────
+        sess_meta = {
+            "use_adb":   use_adb,
+            "backlinks": job.get("backlinks") or [],
+            "proxy":     proxy_config,
+            "platforms": [job["platform"]],
         }
-        prompt = build_audit_prompt(audit_client)
 
-    follow_up = payload.get("follow_up", "")
-    backlinks = payload.get("backlinks", [])
-
-    # Run each platform
-    platform_results: List[PlatformResult] = []
-    for i, platform in enumerate(platforms):
-        is_first = (i == 0)
-        print(f"\n[{device_serial[:20]}] ── {platform.upper()} ──")
-
-        if task_type == "audit":
-            result = _run_platform_audit(
-                device_serial, platform, prompt, client, keyword,
-                cdp_port, is_first,
+        try:
+            result = run_session(
+                serial      = short_serial,
+                full_serial = full_serial,
+                port        = port,
+                platform    = job["platform"],
+                prompt      = job["prompt"],
+                follow_up   = job.get("follow_up"),
+                device_id   = device_id,
+                sess_meta   = sess_meta,
             )
-        elif use_adb:
-            result = _run_platform_session_adb(
-                device_serial, platform, prompt, follow_up, backlinks,
-                is_first,
-            )
-        else:
-            result = _run_platform_session_appium(
-                short_serial, device_serial, platform, prompt,
-                follow_up, backlinks, is_first, port=appium_port,
-            )
+        except Exception as e:
+            return _error_result(job, started_at, t0, device_id, full_serial,
+                                 f"runner_exception: {type(e).__name__}: {e}")
 
-        platform_results.append(result)
-        status_str = result.status.upper()
-        error_str = f" — {result.error}" if result.error else ""
-        print(f"[{device_serial[:20]}] {platform} {status_str} — {result.duration_s}s{error_str}")
+        success = bool(result.get("success"))
 
-        # Wait between platforms
-        if platform != platforms[-1]:
-            time.sleep(3)
+        return {
+            **job,
+            "device_id":        device_id,
+            "device_serial":    full_serial,
+            "status":           "success" if success else "error",
+            "error":            None if success else (result.get("error") or "unknown_error"),
+            "started_at":       started_at,
+            "finished_at":      _iso_utc(),
+            "duration_s":       round(time.time() - t0, 2),
+            "proxy_resolved":   _build_proxy_resolved(result.get("proxy"), gost_endpoint),
+            "response_preview": result.get("response_preview"),
+            "backlink_clicked": result.get("backlink_clicked"),
+            "steps":            result.get("steps") or [],
+        }
 
-    # Determine overall status
-    success_count = sum(1 for r in platform_results if r.status == "success")
-    if success_count == len(platforms):
-        overall_status = "success"
-    elif success_count > 0:
-        overall_status = "partial_success"
-    else:
-        overall_status = "failed"
-
-    return TaskResult(
-        status=overall_status,
-        task_type=task_type,
-        device_serial=device_serial,
-        duration_seconds=round(time.time() - task_start, 1),
-        results=platform_results,
-    )
+    finally:
+        if gm is not None:
+            try:
+                gm.stop()
+            except Exception as e:
+                print(f"[executor] gost stop error: {e}")
+        if gost_port is not None:
+            _release_port(gost_port)
+        _release_device(device_id)

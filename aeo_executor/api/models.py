@@ -1,61 +1,121 @@
-"""Pydantic request/response models for the API."""
+"""Job / JobResult schemas — the scheduler contract.
 
-from typing import Any, Dict, List, Optional
+See docs/EXECUTOR_PAYLOAD.md for the authoritative version of this contract.
+Changes here must stay in sync with that document.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
-class ClientPayload(BaseModel):
-    name: str
-    url: str = ""
-    id: Optional[int] = None
+# ── Job (scheduler → executor) ────────────────────────────────────────────────
 
 
-class KeywordPayload(BaseModel):
-    text: str
-    city: str = ""
-    state: str = ""
-    id: Optional[int] = None
+class ProxyConfig(BaseModel):
+    country: str = "us"
+    zip: str = "10001"
+    session_duration: int = 30
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timezone: Optional[str] = None
 
 
-class ProxyPayload(BaseModel):
-    username: str = ""
-    session_id: str = ""
+class Job(BaseModel):
+    job_id: str = Field(..., description="Scheduler's unique job id (echoed back)")
+    client_id: int
+    business_id: int
+    keyword_id: int
+    keyword_text: str
+    platform: Literal["ChatGPT", "Gemini", "Perplexity"]
 
+    prompt: str
+    follow_up: Optional[str] = None
+    backlinks: List[str] = Field(default_factory=list)
 
-class ExecuteRequest(BaseModel):
-    type: str = Field(..., description="Task type: 'audit' or 'session'")
-    device_serial: str = Field(..., description="Full ADB transport name for ADB commands")
-    serial: str = Field(default="", description="Short serial for Appium (auto-derived if empty)")
-    platforms: List[str] = Field(
-        default=["gemini", "chatgpt", "perplexity"],
-        description="AI platforms to run",
+    proxy: Optional[ProxyConfig] = None
+    device_id: Optional[str] = Field(
+        default=None,
+        description="Pin to a specific device_id from active_devices.json; "
+                    "omit to auto-pick the first free device from the pool.",
     )
-    client: ClientPayload
-    keyword: KeywordPayload
-    prompt: str = Field(default="", description="Prompt text (auto-generated for audit if empty)")
-    follow_up: str = Field(default="", description="Followup prompt (session only)")
-    backlinks: List[str] = Field(default_factory=list, description="Backlink URLs (session only)")
-    use_adb: Optional[bool] = Field(default=None, description="Force ADB-only mode (auto-detected from brand if not set)")
-    port: int = Field(default=4723, description="Appium server port")
-    proxy: Optional[ProxyPayload] = None
 
 
-class ExecuteResponse(BaseModel):
-    status: str
-    type: str
-    device_serial: str
-    duration_seconds: float
-    results: List[Dict[str, Any]]
-    proxy: Optional[Dict[str, Any]] = None
+# ── JobResult (executor → scheduler) ──────────────────────────────────────────
+
+
+class ProxyResolved(BaseModel):
+    status: str = "SKIPPED"
+    gost_endpoint: Optional[str] = Field(
+        default=None,
+        description="host:port of the Mac-side gost listener the phone connected to",
+    )
+    upstream_session: Optional[str] = None
+    exit_ip: Optional[str] = None
+    exit_city: Optional[str] = None
+    exit_region: Optional[str] = None
+    exit_zip: Optional[str] = None
+    mocked_latitude: Optional[float] = None
+    mocked_longitude: Optional[float] = None
+    mocked_timezone: Optional[str] = None
+
+
+class JobResult(BaseModel):
+    # Echoed Job fields
+    job_id: str
+    client_id: int
+    business_id: int
+    keyword_id: int
+    keyword_text: str
+    platform: str
+    prompt: str
+    follow_up: Optional[str] = None
+    backlinks: List[str] = Field(default_factory=list)
+    proxy: Optional[ProxyConfig] = None
+    device_id: Optional[str] = None
+
+    # Execution
+    status: Literal["success", "error"]
     error: Optional[str] = None
+    started_at: str
+    finished_at: str
+    duration_s: float
+
+    # Device that ran it
+    device_serial: Optional[str] = None
+
+    # Resolved proxy (null when proxy was null in Job)
+    proxy_resolved: Optional[ProxyResolved] = None
+
+    # Evidence
+    response_preview: Optional[str] = None
+    backlink_clicked: Optional[str] = None
+
+    # Trace
+    steps: List[str] = Field(default_factory=list)
+
+
+# ── Control endpoints ─────────────────────────────────────────────────────────
+
+
+class InFlightJob(BaseModel):
+    job_id: str
+    device_id: Optional[str]
+    platform: str
+    client_id: int
+    started_at: str
 
 
 class HealthResponse(BaseModel):
     status: str
     version: str
     adb_devices_connected: int
+    device_pool_size: int
+    in_flight: int
+    available: int
 
 
 class StatusResponse(BaseModel):
-    busy: bool
-    current_task: Optional[Dict[str, Any]] = None
+    in_flight: List[InFlightJob] = Field(default_factory=list)

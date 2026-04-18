@@ -1,100 +1,131 @@
-"""FastAPI routes — POST /execute, GET /health, GET /status."""
+"""FastAPI routes for the executor service.
+
+Endpoints:
+  POST /v1/jobs   — run one Job synchronously, return JobResult
+  GET  /health    — liveness + device pool size + in-flight count
+  GET  /status    — list of in-flight jobs
+
+Concurrency: N jobs can run simultaneously (one per device). 2nd job on a
+busy device returns 409. See docs/EXECUTOR_PAYLOAD.md for Job/JobResult.
+"""
+
+from __future__ import annotations
 
 import subprocess
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-from .models import ExecuteRequest, ExecuteResponse, HealthResponse, StatusResponse
-from ..executor.runner import execute_task
+from .models import (
+    HealthResponse,
+    InFlightJob,
+    Job,
+    JobResult,
+    StatusResponse,
+)
+from ..executor.runner import (
+    DeviceBusy,
+    DeviceNotInPool,
+    NoFreeDevice,
+    device_pool_size,
+    devices_available,
+    execute_job,
+    in_flight_jobs,
+)
 
 router = APIRouter()
 
-# Track current execution state
-_current_task: Optional[Dict[str, Any]] = None
-_task_lock = threading.Lock()
-
-VERSION = "1.0.0"
+VERSION = "2.1.0"
 
 
-@router.get("/health", response_model=HealthResponse)
-async def health():
-    """Health check — returns service status and connected device count."""
+# ── Per-HTTP-request metadata (for /status) ────────────────────────────────────
+# Keyed by job_id so /status can surface what the scheduler pushed. Distinct
+# from the runner's _devices_in_use which is keyed by device_id.
+
+_request_meta: Dict[str, Dict[str, Any]] = {}
+_request_meta_lock = threading.Lock()
+
+
+def _register(job: Job) -> None:
+    with _request_meta_lock:
+        _request_meta[job.job_id] = {
+            "job_id":     job.job_id,
+            "device_id":  job.device_id,
+            "platform":   job.platform,
+            "client_id":  job.client_id,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+
+
+def _deregister(job_id: str) -> None:
+    with _request_meta_lock:
+        _request_meta.pop(job_id, None)
+
+
+def _snapshot_meta() -> List[Dict[str, Any]]:
+    with _request_meta_lock:
+        return list(_request_meta.values())
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _adb_device_count() -> int:
     try:
         result = subprocess.run(
             ["adb", "devices"], capture_output=True, text=True, timeout=5,
         )
-        device_count = sum(
-            1 for line in result.stdout.splitlines()[1:]
-            if "\tdevice" in line
-        )
+        return sum(1 for line in result.stdout.splitlines()[1:] if "\tdevice" in line)
     except Exception:
-        device_count = 0
+        return 0
 
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health() -> HealthResponse:
+    in_flight = len(in_flight_jobs())
     return HealthResponse(
         status="healthy",
         version=VERSION,
-        adb_devices_connected=device_count,
+        adb_devices_connected=_adb_device_count(),
+        device_pool_size=device_pool_size(),
+        in_flight=in_flight,
+        available=devices_available(),
     )
 
 
 @router.get("/status", response_model=StatusResponse)
-async def status():
-    """Current execution status."""
-    with _task_lock:
-        if _current_task:
-            return StatusResponse(busy=True, current_task=_current_task)
-        return StatusResponse(busy=False)
+async def status() -> StatusResponse:
+    return StatusResponse(in_flight=[InFlightJob(**m) for m in _snapshot_meta()])
 
 
-@router.post("/execute", response_model=ExecuteResponse)
-async def execute(request: ExecuteRequest):
-    """Execute a phone automation task on a specific device."""
-    with _task_lock:
-        if _current_task:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Busy — currently executing on {_current_task.get('device_serial')}",
-            )
-        _current_task_info = {
-            "type": request.type,
-            "device_serial": request.device_serial,
-            "platforms": request.platforms,
-            "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }
+@router.post("/v1/jobs", response_model=JobResult)
+async def run_job(job: Job) -> JobResult:
+    """Run one Job. Blocks until the session finishes (sync HTTP).
 
-    # Build payload dict from request
-    payload = {
-        "type": request.type,
-        "device_serial": request.device_serial,
-        "serial": request.serial,
-        "platforms": request.platforms,
-        "client": request.client.model_dump(),
-        "keyword": request.keyword.model_dump(),
-        "prompt": request.prompt,
-        "follow_up": request.follow_up,
-        "backlinks": request.backlinks,
-        "use_adb": request.use_adb,
-        "port": request.port,
-    }
+    Returns 200 with a structured JobResult when the job completed, even if
+    `status: error` — HTTP 200 means "executor ran it and has a result for you".
 
+    Returns 4xx at the HTTP layer only for pre-execution errors:
+      - 400: device_id doesn't match any pool entry
+      - 409: target device currently running another job
+      - 503: no free devices and no device_id was pinned (auto-pick pool empty)
+    """
+    _register(job)
     try:
-        with _task_lock:
-            globals()["_current_task"] = _current_task_info
+        try:
+            result = execute_job(job.model_dump())
+        except DeviceBusy as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except DeviceNotInPool as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except NoFreeDevice as e:
+            raise HTTPException(status_code=503, detail=str(e))
 
-        result = execute_task(payload)
-
-        return ExecuteResponse(
-            status=result.status,
-            type=result.task_type,
-            device_serial=result.device_serial,
-            duration_seconds=result.duration_seconds,
-            results=[r.to_dict() for r in result.results],
-            proxy=result.proxy,
-            error=result.error,
-        )
+        return JobResult(**result)
     finally:
-        with _task_lock:
-            globals()["_current_task"] = None
+        _deregister(job.job_id)

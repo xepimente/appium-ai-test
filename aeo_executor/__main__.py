@@ -15,4 +15,4 @@ app = FastAPI(
 app.include_router(router)
 
 if __name__ == "__main__":
-    uvicorn.run("aeo_executor.__main__:app", host=HOST, port=PORT, reload=True)
+    uvicorn.run("aeo_executor.__main__:app", host=HOST, port=PORT)
