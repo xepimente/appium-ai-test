@@ -357,15 +357,24 @@ Error codes the scheduler should handle:
 |---|---|---|
 | `200` | Job completed — inspect `status` / `error` in the JobResult body | proceed |
 | `400 device_id ... not in pool` | Unknown `device_id` | remove stale entry from scheduler's device list |
-| `409 device_busy: device-X` | Target device is running another Job | retry with `device_id: null` or a different one |
-| `503 all N devices in use` / `active_devices.json is empty` | Pool saturated or empty | backoff + retry |
+| `400 device_unreachable` | `device_serial` present but ADB cannot reach it | mark serial offline in scheduler's fleet DB |
+| `409 device_busy: …` | Target device running another Job | retry with `device_id: null` or a different identifier |
+| `422` | Both `device_id` and `device_serial` set | pick one — they are mutually exclusive |
+| `503 all N devices in use` / `active_devices.json is empty` | Pool saturated or empty, and no `device_serial` was passed | backoff + retry |
 
-### Device selection
+### Device selection — two modes
 
-- If `device_id` is passed, the executor looks it up in `active_devices.json`
-  and claims it atomically. Returns 400 if unknown, 409 if busy.
-- If `device_id` is omitted, the executor auto-picks the **first pool entry
-  not currently in use**. Returns 503 if all are busy.
+The scheduler picks **one** of these per Job (or neither, for auto-pick):
+
+| Field | Behavior | `active_devices.json` needed? |
+|---|---|---|
+| `device_id: "device-102"` | Look up in pool; use pool's serial/port/use_adb | ✅ |
+| `device_serial: "adb-…"` | Use serial directly; auto-detect `use_adb` via `getprop ro.product.brand` | ❌ |
+| neither | Auto-pick first free pool entry | ✅ |
+| both | Rejected with 422 Unprocessable Entity | — |
+
+Recommendation for schedulers that already track phones by serial: use
+`device_serial` and skip the pool file entirely.
 
 ### Proxy behavior
 

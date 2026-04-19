@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── Job (scheduler → executor) ────────────────────────────────────────────────
@@ -36,11 +36,31 @@ class Job(BaseModel):
     backlinks: List[str] = Field(default_factory=list)
 
     proxy: Optional[ProxyConfig] = None
+
+    # Device selection — mutually exclusive. If both are None, executor
+    # auto-picks the first free entry from active_devices.json.
     device_id: Optional[str] = Field(
         default=None,
-        description="Pin to a specific device_id from active_devices.json; "
-                    "omit to auto-pick the first free device from the pool.",
+        description="Logical pool id (e.g. 'device-102') from active_devices.json. "
+                    "Mutually exclusive with device_serial.",
     )
+    device_serial: Optional[str] = Field(
+        default=None,
+        description="Full ADB transport serial, e.g. "
+                    "'adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp'. "
+                    "Use when the scheduler manages the device fleet directly "
+                    "and active_devices.json is not maintained. Mutually exclusive "
+                    "with device_id.",
+    )
+
+    @model_validator(mode="after")
+    def _exactly_one_or_neither(self) -> "Job":
+        if self.device_id and self.device_serial:
+            raise ValueError(
+                "device_id and device_serial are mutually exclusive — pass one, "
+                "not both (or omit both to auto-pick from the pool)."
+            )
+        return self
 
 
 # ── JobResult (executor → scheduler) ──────────────────────────────────────────
@@ -75,6 +95,7 @@ class JobResult(BaseModel):
     backlinks: List[str] = Field(default_factory=list)
     proxy: Optional[ProxyConfig] = None
     device_id: Optional[str] = None
+    # device_serial echoed at bottom (always populated with resolved transport)
 
     # Execution
     status: Literal["success", "error"]
@@ -102,7 +123,8 @@ class JobResult(BaseModel):
 
 class InFlightJob(BaseModel):
     job_id: str
-    device_id: Optional[str]
+    device_id: Optional[str] = None
+    device_serial: Optional[str] = None
     platform: str
     client_id: int
     started_at: str

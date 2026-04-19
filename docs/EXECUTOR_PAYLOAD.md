@@ -47,28 +47,45 @@ the `JobResult` and decides whether to push, retry, alert, or discard.
     "timezone":         "America/Chicago"
   },
 
-  // ── Device selection (optional) ────────────────────────────────────────────
-  // Pin to a specific device, or leave out to let the executor pick the next
-  // free one from its active_devices.json pool.
+  // ── Device selection (pass ONE or neither — they are mutually exclusive) ──
+  // Option A — logical pool id (requires active_devices.json on executor):
   "device_id":     "device-101"
+
+  // Option B — raw ADB serial (skips pool lookup, works standalone):
+  // "device_serial": "adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp"
+
+  // Option C — omit both: executor auto-picks first free entry from pool.
 }
 ```
 
 ### Required vs optional
 
-| Field            | Required | Default if omitted               |
-|------------------|:--------:|----------------------------------|
-| job_id           |    ✓     |                                  |
-| client_id        |    ✓     |                                  |
-| business_id      |    ✓     |                                  |
-| keyword_id       |    ✓     |                                  |
-| keyword_text     |    ✓     |                                  |
-| platform         |    ✓     |                                  |
-| prompt           |    ✓     |                                  |
-| follow_up        |          | `null`                           |
-| backlinks        |          | `[]`                             |
-| proxy            |          | `null` — runs on clearnet        |
-| device_id        |          | auto-picked from device pool     |
+| Field          | Required | Default if omitted |
+|----------------|:--------:|--------------------|
+| job_id         |    ✓     |                    |
+| client_id      |    ✓     |                    |
+| business_id    |    ✓     |                    |
+| keyword_id     |    ✓     |                    |
+| keyword_text   |    ✓     |                    |
+| platform       |    ✓     |                    |
+| prompt         |    ✓     |                    |
+| follow_up      |          | `null`             |
+| backlinks      |          | `[]`               |
+| proxy          |          | `null` — runs on clearnet |
+| device_id      |          | see device-selection table below |
+| device_serial  |          | see device-selection table below |
+
+### Device selection — which field to pass
+
+| Scheduler sends                  | Executor behavior                                                                  | `active_devices.json` needed? |
+|----------------------------------|------------------------------------------------------------------------------------|:-----------------------------:|
+| `device_id: "device-102"`        | Look up in pool; use pool's serial/port/use_adb                                    | ✅                            |
+| `device_serial: "adb-…"`         | Use serial directly; auto-detect use_adb via `getprop ro.product.brand`            | ❌                            |
+| neither set                      | Auto-pick first free pool entry                                                    | ✅                            |
+| both set                         | `422 Unprocessable Entity` — mutually exclusive                                    | —                             |
+
+Recommendation for schedulers managing their own device fleet: **pass
+`device_serial`** and ignore the pool file entirely.
 
 ---
 
@@ -176,51 +193,154 @@ verification layer closes that gap.
 
 ---
 
-## 5. Transport (TBD)
+## 5. Transport
 
-The current executor is invoked as a Python function:
-```python
-from session_runner import run_session
-result = run_session(serial, full_serial, port, platform, prompt, follow_up,
-                     device_id, sess_meta={...proxy/backlinks/...})
-```
+**Current:** HTTP sync. Scheduler POSTs a Job, blocks until the session
+finishes, reads the JobResult from the response body.
 
-Future transports (to be decided by the scheduler):
-- **HTTP:** `POST /v1/jobs` with Job body → returns JobResult synchronously, or
-  202 + `GET /v1/jobs/{job_id}` to poll
-- **Queue:** SQS/Redis consumer pulls Job from `jobs-pending`, pushes JobResult
-  to `jobs-done`
-- **Webhook:** scheduler registers a URL, executor POSTs JobResult when done
+| Method | Path | Behavior |
+|---|---|---|
+| `POST` | `/v1/jobs` | Run one Job synchronously. 200 = completed (check `status` in body); 4xx/5xx = pre-execution error |
+| `GET`  | `/health` | Liveness + pool size + in-flight count |
+| `GET`  | `/status` | List of currently in-flight jobs |
+
+**Base URL:** `http://<executor-host>:8100` (default port; override with
+`AEO_EXECUTOR_PORT`).
+
+Typical session duration 2–4 minutes, so the scheduler's HTTP client timeout
+should be ≥ 600 s.
+
+Future transport options under consideration (not yet implemented): async
+202 + poll, SQS/Redis queue consumer, webhook callbacks.
 
 ---
 
 ## 6. Examples
 
+All examples assume the executor is reachable at `http://192.168.0.102:8100`.
+
 ### 6.1 Minimum viable Job (no proxy, no follow-up, no backlinks)
-```json
-{
-  "job_id":       "test-001",
-  "client_id":    4,
-  "business_id":  22,
-  "keyword_id":   15,
-  "keyword_text": "local marketing agency",
-  "platform":     "ChatGPT",
-  "prompt":       "Recommend a local marketing agency in Pensacola, FL."
-}
+
+```bash
+curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
+  -H 'Content-Type: application/json' \
+  --max-time 600 \
+  -d '{
+    "job_id":       "smoke-001",
+    "client_id":    4,
+    "business_id":  22,
+    "keyword_id":   15,
+    "keyword_text": "local marketing agency",
+    "platform":     "ChatGPT",
+    "prompt":       "Recommend a local marketing agency in Pensacola, FL."
+  }'
 ```
 
-### 6.2 Full Job with proxy + backlinks + follow-up
-```json
+Use case: smoke test, or when geo-targeting doesn't matter.
+
+### 6.2 Full Job with proxy + follow-up + backlinks, pinned by `device_id`
+
+```bash
+curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
+  -H 'Content-Type: application/json' \
+  --max-time 600 \
+  -d '{
+    "job_id":       "daily-c4-2026-04-19-001",
+    "client_id":    4,
+    "business_id":  22,
+    "keyword_id":   15,
+    "keyword_text": "local marketing agency",
+    "platform":     "Perplexity",
+    "prompt":       "I am looking for recommendations on local marketing agency in the Pensacola, FL area. A friend mentioned TestCo. Are they a solid choice, or are there stronger options locally? If you can, cite the sources or links you are using.",
+    "follow_up":    "Got any specific examples of their recent work or reviews I can check?",
+    "backlinks":    ["medium.com", "clutch.co", "testco.com"],
+    "proxy": {
+      "country":          "us",
+      "zip":              "32504",
+      "session_duration": 30,
+      "latitude":         30.4213,
+      "longitude":        -87.2169,
+      "timezone":         "America/Chicago"
+    },
+    "device_id": "device-102"
+  }'
+```
+
+Use case: production daily session — geo-pinned to client's business location.
+Requires `active_devices.json` on the executor host.
+
+### 6.3 Same Job — using `device_serial` (no pool file needed)
+
+```bash
+curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
+  -H 'Content-Type: application/json' \
+  --max-time 600 \
+  -d '{
+    "job_id":       "daily-c4-2026-04-19-002",
+    "client_id":    4,
+    "business_id":  22,
+    "keyword_id":   15,
+    "keyword_text": "local marketing agency",
+    "platform":     "Perplexity",
+    "prompt":       "...",
+    "follow_up":    "...",
+    "backlinks":    ["clutch.co"],
+    "proxy": {
+      "country": "us", "zip": "32504", "session_duration": 30,
+      "latitude": 30.4213, "longitude": -87.2169,
+      "timezone": "America/Chicago"
+    },
+    "device_serial": "adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp"
+  }'
+```
+
+Use case: scheduler manages its own phone fleet and tracks raw ADB serials.
+Executor does not consult `active_devices.json`; auto-detects `use_adb` via
+`getprop ro.product.brand` on first access.
+
+### 6.4 Auto-pick (scheduler doesn't pin a device)
+
+```bash
+curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
+  -H 'Content-Type: application/json' \
+  --max-time 600 \
+  -d '{
+    "job_id":       "auto-001",
+    "client_id":    5,
+    "business_id":  30,
+    "keyword_id":   42,
+    "keyword_text": "pediatric clinic",
+    "platform":     "Gemini",
+    "prompt":       "I am looking for a pediatric clinic in Miami, FL. A friend mentioned Leo Lapuerta MD. Are they a good choice?",
+    "follow_up":    "Any recent reviews I should check?",
+    "proxy": {
+      "country":          "us",
+      "zip":              "33101",
+      "session_duration": 30,
+      "latitude":         25.7617,
+      "longitude":        -80.1918,
+      "timezone":         "America/New_York"
+    }
+  }'
+```
+
+Omit both `device_id` and `device_serial` to let the executor pick the first
+free pool entry. Returns `503 no_free_devices` if all pool entries are busy.
+
+### 6.5 Successful JobResult (response body)
+
+```jsonc
 {
-  "job_id":       "daily-c4-001",
+  // — all Job fields echoed back verbatim —
+  "job_id":       "daily-c4-2026-04-19-001",
   "client_id":    4,
   "business_id":  22,
   "keyword_id":   15,
   "keyword_text": "local marketing agency",
   "platform":     "Perplexity",
-  "prompt":       "I'm looking for recommendations on local marketing agency in Pensacola, FL. A friend mentioned TestCo.",
-  "follow_up":    "Got any specific examples of their recent work?",
-  "backlinks":    ["medium.com", "clutch.co"],
+  "prompt":       "I am looking for recommendations on local marketing agency in the Pensacola, FL area. A friend mentioned TestCo...",
+  "follow_up":    "Got any specific examples of their recent work or reviews I can check?",
+  "backlinks":    ["medium.com", "clutch.co", "testco.com"],
   "proxy": {
     "country":          "us",
     "zip":              "32504",
@@ -229,59 +349,171 @@ Future transports (to be decided by the scheduler):
     "longitude":        -87.2169,
     "timezone":         "America/Chicago"
   },
-  "device_id": "device-101"
+  "device_id":      "device-102",
+
+  // — execution fields —
+  "status":         "success",
+  "error":          null,
+  "started_at":     "2026-04-19T04:32:15Z",
+  "finished_at":    "2026-04-19T04:35:28Z",
+  "duration_s":     193.4,
+
+  "device_serial":  "adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp",
+
+  "proxy_resolved": {
+    "status":           "CONNECTED",
+    "gost_endpoint":    "192.168.0.102:11001",
+    "upstream_session": "user-spknlt0736-session-ab3kz7-sessionduration-30-country-us-zip-32504",
+    "exit_ip":          "68.228.26.18",
+    "exit_city":        "Pensacola",
+    "exit_region":      "Florida",
+    "exit_zip":         "32501",
+    "mocked_latitude":  30.4042,
+    "mocked_longitude": -87.1982,
+    "mocked_timezone":  "America/Chicago"
+  },
+
+  "response_preview": "Based on reviews from Clutch.co and local directories, TestCo appears to be a solid mid-tier marketing agency in Pensacola...",
+  "backlink_clicked": "https://clutch.co/agencies/pensacola",
+  "steps": [
+    "dismissed_fre",
+    "navigated",
+    "found_input",
+    "typed_prompt",
+    "sent_prompt",
+    "generation_complete",
+    "scrolled",
+    "typed_followup",
+    "sent_followup",
+    "scrolled_followup",
+    "backlink_clicked:https://clutch.co/agencies/pensacola"
+  ]
 }
 ```
 
-### 6.3 Successful JobResult
-```json
+### 6.6 Failed JobResult — submit missed
+
+```jsonc
 {
-  "job_id":       "daily-c4-001",
+  "job_id":       "daily-c4-2026-04-19-003",
   "client_id":    4,
   "business_id":  22,
   "keyword_id":   15,
   "keyword_text": "local marketing agency",
   "platform":     "Perplexity",
-  "prompt":       "I'm looking...",
+  "prompt":       "I am looking...",
   "follow_up":    "Got any specific...",
-  "backlinks":    ["medium.com", "clutch.co"],
-  "proxy":        { "...": "..." },
-  "device_id":    "device-101",
+  "backlinks":    ["clutch.co"],
+  "proxy":        { "country": "us", "zip": "32504", ... },
+  "device_id":    "device-102",
 
-  "status":       "success",
-  "error":        null,
-  "started_at":   "2026-04-18T22:15:04Z",
-  "finished_at":  "2026-04-18T22:18:32Z",
-  "duration_s":   208.2,
-  "device_serial":"adb-149145555W006589-...",
-  "proxy_resolved": {
-    "status":    "CONNECTED",
-    "exit_ip":   "68.228.26.18",
-    "exit_city": "Pensacola",
-    "exit_zip":  "32501"
-  },
-  "response_preview": "Based on reviews from Clutch.co and Yelp, TestCo is a solid choice in Pensacola...",
-  "backlink_clicked": "https://clutch.co/agencies/pensacola?utm_source=perplexity",
-  "steps": ["dismissed_fre", "navigated", "typed_prompt", "sent_prompt", "generation_complete", "scrolled", "typed_followup", "sent_followup", "scrolled_followup", "backlink_clicked:https://clutch.co/..."]
+  "status":       "error",
+  "error":        "submit_failed: input still contains 'I am looking for recommendati...'",
+  "started_at":   "2026-04-19T04:40:00Z",
+  "finished_at":  "2026-04-19T04:42:30Z",
+  "duration_s":   150.0,
+
+  "device_serial":  "adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp",
+  "proxy_resolved": { "status": "CONNECTED", "gost_endpoint": "192.168.0.102:11001", ... },
+
+  "response_preview": "",
+  "backlink_clicked": null,
+  "steps": [
+    "dismissed_fre",
+    "navigated",
+    "found_input",
+    "typed_prompt",
+    "sent_prompt",
+    "generation_timeout",
+    "verify_failed:submit_failed: input still contains 'I am looking for recommendati...'"
+  ]
 }
 ```
 
-### 6.4 Failed JobResult (submit missed)
-```json
-{
-  "job_id":       "daily-c4-002",
-  "client_id":    4,
-  "platform":     "Perplexity",
-  "...":          "all input fields echoed",
+Scheduler action: retry with a new `job_id` on any free device — not a code
+bug, just session-level flakiness.
 
-  "status":       "error",
-  "error":        "submit_failed: input still contains 'Im looking for recommendations on lo...'",
-  "started_at":   "2026-04-18T22:20:00Z",
-  "finished_at":  "2026-04-18T22:22:30Z",
-  "duration_s":   150.0,
-  "device_id":    "device-102",
-  "backlink_clicked": null,
-  "response_preview": "",
-  "steps": ["dismissed_fre", "navigated", "typed_prompt", "sent_prompt", "generation_timeout", "verify_failed:submit_failed: ..."]
+### 6.7 HTTP-level error examples
+
+All return a JSON body with a `detail` field:
+
+```bash
+# 409 — target device is running another job
+curl -sS -o /dev/null -w "%{http_code}\n" -X POST .../v1/jobs -d '{
+  "job_id":"busy-test", ...same client/biz/keyword..., "device_id":"device-102"
+}'
+# 409
+# {"detail":"device_busy: device-102 (in use by daily-c4-2026-04-19-001)"}
+
+# 400 — unreachable serial
+curl -sS -X POST .../v1/jobs -d '{
+  "job_id":"unreachable-test", ..., "device_serial":"adb-DOES-NOT-EXIST-xxx"
+}'
+# 400
+# {"detail":"device_unreachable: adb cannot reach 'adb-DOES-NOT-EXIST-xxx'"}
+
+# 422 — both identifiers passed
+curl -sS -X POST .../v1/jobs -d '{
+  "job_id":"both-test", ..., "device_id":"device-102", "device_serial":"adb-..."
+}'
+# 422
+# {"detail":[{"type":"value_error","msg":"...mutually exclusive..."}]}
+
+# 503 — no free devices and auto-pick pool is empty / saturated
+curl -sS -X POST .../v1/jobs -d '{"job_id":"sat-test", ...}'
+# 503
+# {"detail":"all 5 devices currently in use"}
+```
+
+### 6.8 Python scheduler snippet
+
+```python
+import requests
+
+EXECUTOR_URL = "http://192.168.0.102:8100"
+
+job = {
+    "job_id":       f"sched-{int(time.time())}",
+    "client_id":    4,
+    "business_id":  22,
+    "keyword_id":   15,
+    "keyword_text": "local marketing agency",
+    "platform":     "Perplexity",
+    "prompt":       "...",
+    "follow_up":    "...",
+    "backlinks":    ["clutch.co"],
+    "proxy": {
+        "country": "us", "zip": "32504", "session_duration": 30,
+        "latitude": 30.4213, "longitude": -87.2169,
+        "timezone": "America/Chicago",
+    },
+    "device_serial": "adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp",
 }
+
+resp = requests.post(f"{EXECUTOR_URL}/v1/jobs", json=job, timeout=600)
+
+if resp.status_code == 200:
+    result = resp.json()
+    if result["status"] == "success":
+        print(f"✓ {result['job_id']} — {result['duration_s']}s on {result['device_serial']}")
+        preview = (result.get('response_preview') or '')[:100]
+        print(f"  response: {preview}...")
+        print(f"  backlink clicked: {result.get('backlink_clicked')}")
+    else:
+        print(f"✗ {result['job_id']} failed: {result['error']}")
+        # Decide retry based on the short code before the colon:
+        code = (result.get('error') or '').split(':', 1)[0]
+        if code in {'submit_failed', 'generation_timeout', 'followup_timeout'}:
+            # retry-safe — flake, not a code bug
+            ...
+elif resp.status_code == 400:
+    print(f"bad device reference: {resp.json()['detail']}")
+elif resp.status_code == 409:
+    print(f"device busy — retry elsewhere: {resp.json()['detail']}")
+elif resp.status_code == 422:
+    print(f"invalid payload: {resp.json()['detail']}")
+elif resp.status_code == 503:
+    print(f"pool saturated — backoff + retry: {resp.json()['detail']}")
+else:
+    print(f"unexpected: {resp.status_code} {resp.text}")
 ```

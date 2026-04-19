@@ -1,13 +1,16 @@
 """Thin wrapper that turns a Job payload into a call to session_runner.run_session
 and builds a JobResult from the return dict.
 
-Concurrency model:
-  - Multiple Jobs can run simultaneously (one per device)
-  - Per-device in-flight tracking rejects a 2nd Job on a busy device with a
-    structured `DeviceBusy` error; scheduler is expected to retry elsewhere
-  - When a Job has `proxy`, the runner spins up a per-Job gost listener on a
-    dynamically allocated port and tears it down on finish (matches how
-    run_parallel yesterday produced 5/5 PASS)
+Device selection:
+  - Job.device_id     → lookup in active_devices.json (logical pool id)
+  - Job.device_serial → use the serial directly, bypass the pool entirely
+  - neither           → auto-pick first free entry from active_devices.json
+
+In-flight tracking is keyed by **resolved serial**, so a Job using device_id
+and a Job using the matching raw serial collide correctly.
+
+When Job.proxy is set, the runner spins up a per-Job gost listener on a
+dynamically allocated port and tears it down when the Job finishes.
 
 See docs/EXECUTOR_PAYLOAD.md for the authoritative Job/JobResult schema.
 """
@@ -17,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -27,7 +31,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from gost_manager import GostManager, detect_lan_ip
+from gost_manager import GostManager
 from session_runner import run_session
 
 
@@ -36,15 +40,21 @@ ACTIVE_DEVICES_PATH = os.path.join(PROJECT_ROOT, "active_devices.json")
 GOST_PORT_MIN = 11001
 GOST_PORT_MAX = 12000
 
+# Brands that must use ADB-only (Appium crashes or hangs on these).
+# Lower-cased for case-insensitive match against ro.product.brand.
+ADB_ONLY_BRANDS = {"infinix", "tecno"}
+
+DEFAULT_APPIUM_PORT = 4723
+
 
 # ── Exceptions surfaced to the HTTP layer ─────────────────────────────────────
 
 
 class DeviceBusy(Exception):
     """Raised when a Job targets a device that's already running a Job."""
-    def __init__(self, device_id: str, holder_job_id: str) -> None:
-        super().__init__(f"device_busy: {device_id} (in use by {holder_job_id})")
-        self.device_id = device_id
+    def __init__(self, identifier: str, holder_job_id: str) -> None:
+        super().__init__(f"device_busy: {identifier} (in use by {holder_job_id})")
+        self.identifier = identifier
         self.holder_job_id = holder_job_id
 
 
@@ -56,11 +66,17 @@ class DeviceNotInPool(Exception):
     """Raised when Job.device_id doesn't match any entry in active_devices.json."""
 
 
+class DeviceUnreachable(Exception):
+    """Raised when Job.device_serial targets a phone that ADB can't talk to."""
+
+
 # ── Shared state (thread-safe) ────────────────────────────────────────────────
 
 
-_devices_in_use: Dict[str, str] = {}   # device_id → job_id currently holding it
-_devices_lock = threading.Lock()
+# Keyed by resolved full_serial so both device_id and device_serial paths
+# collide correctly. Value: job_id currently holding the phone.
+_serials_in_use: Dict[str, Dict[str, str]] = {}
+_serials_lock = threading.Lock()
 
 _ports_in_use: set = set()
 _ports_lock = threading.Lock()
@@ -96,65 +112,72 @@ def _port_bindable(port: int) -> bool:
         s.close()
 
 
-# ── Device pool ───────────────────────────────────────────────────────────────
+# ── Device pool (optional — only used for device_id path + auto-pick) ────────
 
 
 def _load_device_pool() -> Dict[str, Dict[str, Any]]:
-    with open(ACTIVE_DEVICES_PATH) as f:
-        return json.load(f)
+    """Load active_devices.json. Returns {} if the file is missing — the
+    scheduler can still drive the executor via device_serial without a pool."""
+    if not os.path.exists(ACTIVE_DEVICES_PATH):
+        return {}
+    try:
+        with open(ACTIVE_DEVICES_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def device_pool_size() -> int:
-    try:
-        return len(_load_device_pool())
-    except Exception:
-        return 0
+    return len(_load_device_pool())
 
 
 def devices_available() -> int:
-    with _devices_lock:
-        in_use = set(_devices_in_use.keys())
-    return max(0, device_pool_size() - len(in_use))
+    with _serials_lock:
+        busy = len(_serials_in_use)
+    return max(0, device_pool_size() - busy)
 
 
 def in_flight_jobs() -> List[Dict[str, str]]:
-    """Return a snapshot of currently-running jobs keyed by device_id."""
-    with _devices_lock:
-        return [{"device_id": did, "job_id": jid} for did, jid in _devices_in_use.items()]
+    with _serials_lock:
+        return [
+            {
+                "device_id":     info.get("device_id") or "",
+                "device_serial": serial,
+                "job_id":        info["job_id"],
+            }
+            for serial, info in _serials_in_use.items()
+        ]
 
 
-def _claim_device(device_id_hint: Optional[str], job_id: str) -> Tuple[str, Dict[str, Any]]:
-    """Pick a device and mark it in-flight atomically. Raises DeviceBusy /
-    NoFreeDevice / DeviceNotInPool on failure."""
-    pool = _load_device_pool()
-    if not pool:
-        raise NoFreeDevice("active_devices.json is empty")
-
-    with _devices_lock:
-        if device_id_hint:
-            if device_id_hint not in pool:
-                raise DeviceNotInPool(
-                    f"device_id {device_id_hint!r} not in pool (have: {list(pool.keys())})"
-                )
-            if device_id_hint in _devices_in_use:
-                raise DeviceBusy(device_id_hint, _devices_in_use[device_id_hint])
-            _devices_in_use[device_id_hint] = job_id
-            return device_id_hint, pool[device_id_hint]
-
-        # Auto-pick: first pool entry not currently in use
-        for did, info in pool.items():
-            if did not in _devices_in_use:
-                _devices_in_use[did] = job_id
-                return did, info
-        raise NoFreeDevice(f"all {len(pool)} devices currently in use")
+# ── Serial / device resolution ────────────────────────────────────────────────
 
 
-def _release_device(device_id: str) -> None:
-    with _devices_lock:
-        _devices_in_use.pop(device_id, None)
+def _adb_reachable(serial: str) -> bool:
+    """Quick `adb -s <serial> shell echo ok` probe."""
+    try:
+        r = subprocess.run(
+            ["adb", "-s", serial, "shell", "echo", "ok"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return "ok" in r.stdout
+    except Exception:
+        return False
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+def _detect_use_adb(serial: str) -> bool:
+    """Read ro.product.brand from the device. Infinix/TECNO → True (ADB-only).
+    All other brands default to False (Appium). Returns True on failure to
+    match session_runner's default (currently use_adb=True for all active
+    pool devices)."""
+    try:
+        r = subprocess.run(
+            ["adb", "-s", serial, "shell", "getprop", "ro.product.brand"],
+            capture_output=True, text=True, timeout=5,
+        )
+        brand = r.stdout.strip().lower()
+        return brand in ADB_ONLY_BRANDS or not brand
+    except Exception:
+        return True
 
 
 def _derive_short_serial(full_serial: str) -> str:
@@ -164,6 +187,104 @@ def _derive_short_serial(full_serial: str) -> str:
         inner = full_serial[4:].split("._adb-tls-connect")[0]
         return inner.rsplit("-", 1)[0]
     return full_serial
+
+
+def _resolve_device(device_id_hint: Optional[str],
+                    device_serial_hint: Optional[str],
+                    job_id: str) -> Tuple[Optional[str], str, Dict[str, Any]]:
+    """Return (device_id_or_None, full_serial, dev_info) and atomically mark
+    the serial as in-flight.
+
+    Three code paths:
+      1. device_id given        → pool lookup, use pool's serial/port/use_adb
+      2. device_serial given    → skip pool, auto-detect use_adb/port from device
+      3. both None (auto-pick)  → first free pool entry
+    """
+    pool = _load_device_pool()
+
+    # ── Path 2: direct serial, no pool needed ───────────────────────────────
+    if device_serial_hint:
+        full_serial = device_serial_hint
+        if not _adb_reachable(full_serial):
+            raise DeviceUnreachable(
+                f"device_unreachable: adb cannot reach {full_serial!r}"
+            )
+
+        # Match back to a pool entry if one exists (so device_id is still
+        # echoed in the JobResult when possible)
+        matched_id: Optional[str] = None
+        matched_info: Optional[Dict[str, Any]] = None
+        for did, info in pool.items():
+            if info.get("serial") == full_serial:
+                matched_id = did
+                matched_info = info
+                break
+
+        if matched_info is not None:
+            dev_info = matched_info
+        else:
+            dev_info = {
+                "serial":  full_serial,
+                "port":    DEFAULT_APPIUM_PORT,
+                "use_adb": _detect_use_adb(full_serial),
+            }
+
+        with _serials_lock:
+            if full_serial in _serials_in_use:
+                raise DeviceBusy(full_serial, _serials_in_use[full_serial]["job_id"])
+            _serials_in_use[full_serial] = {
+                "job_id":    job_id,
+                "device_id": matched_id or "",
+            }
+        return matched_id, full_serial, dev_info
+
+    # ── Path 1: logical pool id ──────────────────────────────────────────────
+    if device_id_hint:
+        if not pool:
+            raise NoFreeDevice(
+                "active_devices.json is missing or empty — pass device_serial "
+                "or run setup_devices.py --assign"
+            )
+        if device_id_hint not in pool:
+            raise DeviceNotInPool(
+                f"device_id {device_id_hint!r} not in pool (have: {list(pool.keys())})"
+            )
+        info = pool[device_id_hint]
+        full_serial = info["serial"]
+
+        with _serials_lock:
+            if full_serial in _serials_in_use:
+                raise DeviceBusy(
+                    device_id_hint, _serials_in_use[full_serial]["job_id"]
+                )
+            _serials_in_use[full_serial] = {
+                "job_id":    job_id,
+                "device_id": device_id_hint,
+            }
+        return device_id_hint, full_serial, info
+
+    # ── Path 3: auto-pick ────────────────────────────────────────────────────
+    if not pool:
+        raise NoFreeDevice(
+            "active_devices.json is missing or empty and no device_serial "
+            "was passed — nothing to auto-pick from"
+        )
+    with _serials_lock:
+        for did, info in pool.items():
+            full_serial = info["serial"]
+            if full_serial in _serials_in_use:
+                continue
+            _serials_in_use[full_serial] = {"job_id": job_id, "device_id": did}
+            return did, full_serial, info
+        raise NoFreeDevice(f"all {len(pool)} devices currently in use")
+
+
+def _release_serial(full_serial: str) -> None:
+    with _serials_lock:
+        _serials_in_use.pop(full_serial, None)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 
 def _proxy_dict_from_job(proxy) -> Optional[Dict[str, Any]]:
@@ -222,20 +343,26 @@ def _error_result(job: Dict[str, Any], started_at: str, t0: float,
 def execute_job(job: Dict[str, Any]) -> Dict[str, Any]:
     """Run one Job and return a JobResult dict.
 
-    Raises DeviceBusy / NoFreeDevice / DeviceNotInPool up to the route layer
-    (which maps them to 409/400). Any other failure is captured inside the
-    result with status='error' + a descriptive error code.
+    Raises DeviceBusy / NoFreeDevice / DeviceNotInPool / DeviceUnreachable
+    up to the route layer (which maps them to HTTP 409/400/503).
+    Any other failure is captured inside the result with status='error'.
     """
     started_at = _iso_utc()
     t0 = time.time()
 
-    # Claim a device (raises exceptions the route handler surfaces as HTTP errors)
-    device_id, dev = _claim_device(job.get("device_id"), job["job_id"])
+    device_id, full_serial, dev = _resolve_device(
+        device_id_hint     = job.get("device_id"),
+        device_serial_hint = job.get("device_serial"),
+        job_id             = job["job_id"],
+    )
 
-    full_serial   = dev["serial"]
     short_serial  = _derive_short_serial(full_serial)
-    port          = dev.get("port", 0)
+    port          = dev.get("port", DEFAULT_APPIUM_PORT)
     use_adb       = dev.get("use_adb", True)
+
+    # Stable label for log lines + gost device spec key. Uses device_id if we
+    # have one, else a short derivative of the serial.
+    device_label  = device_id or short_serial
 
     proxy_config  = _proxy_dict_from_job(job.get("proxy"))
     gost_endpoint: Optional[str] = None
@@ -252,7 +379,7 @@ def execute_job(job: Dict[str, Any]) -> Dict[str, Any]:
                                      f"gost_port_alloc_failed: {e}")
 
             gm_spec = [{
-                "device_id":        device_id,
+                "device_id":        device_label,
                 "zip":              proxy_config.get("zip", "10001"),
                 "country":          proxy_config.get("country", "us"),
                 "session_duration": int(proxy_config.get("session_duration", 30)),
@@ -265,7 +392,7 @@ def execute_job(job: Dict[str, Any]) -> Dict[str, Any]:
                 return _error_result(job, started_at, t0, device_id, full_serial,
                                      f"gost_start_failed: {e}")
 
-            mapping = gm.mapping[device_id]
+            mapping = gm.mapping[device_label]
             gost_endpoint = f"{mapping['host']}:{mapping['port']}"
             proxy_config["gost"] = mapping
 
@@ -285,7 +412,7 @@ def execute_job(job: Dict[str, Any]) -> Dict[str, Any]:
                 platform    = job["platform"],
                 prompt      = job["prompt"],
                 follow_up   = job.get("follow_up"),
-                device_id   = device_id,
+                device_id   = device_label,
                 sess_meta   = sess_meta,
             )
         except Exception as e:
@@ -317,4 +444,4 @@ def execute_job(job: Dict[str, Any]) -> Dict[str, Any]:
                 print(f"[executor] gost stop error: {e}")
         if gost_port is not None:
             _release_port(gost_port)
-        _release_device(device_id)
+        _release_serial(full_serial)

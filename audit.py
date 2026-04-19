@@ -269,6 +269,7 @@ CSV_COLUMNS = [
     "rank_position", "rank_total", "mentioned", "rank_context",
     "screenshot", "response_text", "error",
     "proxy_ip", "proxy_city", "proxy_region", "proxy_zip",
+    "prompt",
 ]
 
 _csv_lock = threading.Lock()
@@ -312,6 +313,7 @@ def log_entry(client, keyword, platform, mode, device, status, screenshot_path, 
         "proxy_city": proxy_info.get("ip_city", ""),
         "proxy_region": proxy_info.get("ip_region", ""),
         "proxy_zip": proxy_info.get("ip_zip", ""),
+        "prompt": _render_audit_prompt(client, keyword),
     }
 
     with _csv_lock:
@@ -321,6 +323,24 @@ def log_entry(client, keyword, platform, mode, device, status, screenshot_path, 
             writer.writerow(row)
 
     return row
+
+
+def _render_audit_prompt(client, keyword):
+    """Render the exact prompt sent to the AI for this audit row.
+
+    Uses the same AUDIT_PROMPT_TEMPLATE the live flow uses, so log rows show
+    the literal prompt the model saw. Returns "" if any template field is
+    missing (matches the admin-side contract: empty string, never partial)."""
+    try:
+        return AUDIT_PROMPT_TEMPLATE.format(
+            keyword=keyword,
+            city=client.get("city", "") or "",
+            state=client.get("state", "") or "",
+            biz_name=client.get("biz_name", "") or "",
+            biz_url=client.get("biz_url", "") or "",
+        )
+    except (KeyError, AttributeError):
+        return ""
 
 
 # ── ADB Imports ──────────────────────────────────────────────────────────────

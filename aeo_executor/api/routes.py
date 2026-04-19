@@ -28,6 +28,7 @@ from .models import (
 from ..executor.runner import (
     DeviceBusy,
     DeviceNotInPool,
+    DeviceUnreachable,
     NoFreeDevice,
     device_pool_size,
     devices_available,
@@ -37,7 +38,7 @@ from ..executor.runner import (
 
 router = APIRouter()
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 
 # ── Per-HTTP-request metadata (for /status) ────────────────────────────────────
@@ -51,11 +52,12 @@ _request_meta_lock = threading.Lock()
 def _register(job: Job) -> None:
     with _request_meta_lock:
         _request_meta[job.job_id] = {
-            "job_id":     job.job_id,
-            "device_id":  job.device_id,
-            "platform":   job.platform,
-            "client_id":  job.client_id,
-            "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "job_id":        job.job_id,
+            "device_id":     job.device_id,
+            "device_serial": job.device_serial,
+            "platform":      job.platform,
+            "client_id":     job.client_id,
+            "started_at":    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
 
 
@@ -111,9 +113,9 @@ async def run_job(job: Job) -> JobResult:
     `status: error` — HTTP 200 means "executor ran it and has a result for you".
 
     Returns 4xx at the HTTP layer only for pre-execution errors:
-      - 400: device_id doesn't match any pool entry
+      - 400: device_id doesn't match pool; or device_serial is unreachable via ADB
       - 409: target device currently running another job
-      - 503: no free devices and no device_id was pinned (auto-pick pool empty)
+      - 503: no free devices and auto-pick pool is empty
     """
     _register(job)
     try:
@@ -122,6 +124,8 @@ async def run_job(job: Job) -> JobResult:
         except DeviceBusy as e:
             raise HTTPException(status_code=409, detail=str(e))
         except DeviceNotInPool as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except DeviceUnreachable as e:
             raise HTTPException(status_code=400, detail=str(e))
         except NoFreeDevice as e:
             raise HTTPException(status_code=503, detail=str(e))
