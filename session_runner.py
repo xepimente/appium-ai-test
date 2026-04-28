@@ -256,7 +256,9 @@ def run_session(serial: str, full_serial: str, port: int,
     if proxy_config:
         from proxy import enrich_proxy_config
         proxy_config = enrich_proxy_config(proxy_config, meta)
-    platforms = meta.get("platforms", [platform])
+    platforms = meta.get("platforms", (
+        ["ChatGPT", "Gemini", "Perplexity"] if job_type == "audit" else [platform]
+    ))
 
     lock.acquire()
     proxy_info = None

@@ -344,7 +344,6 @@ curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
     "business_id":   22,
     "keyword_id":    15,
     "keyword_text":  "drain cleaning",
-    "platform":      "ChatGPT",
     "type":          "audit",
     "biz_name":      "American Plumbing Co",
     "biz_url":       "https://americanplumbing-co.com",
@@ -360,7 +359,9 @@ curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
 ```
 
 The executor auto-builds the ranking prompt from `keyword_text`, `biz_name`, `biz_url`,
-`city`, `state`. Returns audit result with ranking position.
+`city`, `state`. For audit jobs, the `platform` field is ignored — the executor runs
+**all 3 platforms** (ChatGPT, Gemini, Perplexity) sequentially under the same proxy.
+Returns audit result with ranking position per platform.
 
 ### 6.5 Auto-pick (scheduler doesn't pin a device)
 
