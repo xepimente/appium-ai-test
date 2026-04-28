@@ -23,8 +23,19 @@ the `JobResult` and decides whether to push, retry, alert, or discard.
   "keyword_id":    15,                         // int    — admin keywordId
   "keyword_text":  "local marketing agency",   // string — for logging/prompt
   "platform":      "ChatGPT",                  // enum   — "ChatGPT" | "Gemini" | "Perplexity"
+  "type":          "daily",                    // enum   — "daily" (seeding) | "audit" (ranking)
 
-  // ── Prompt content (required) ──────────────────────────────────────────────
+  // ── Audit fields (only when type = "audit") ────────────────────────────────
+  // When type = "audit", the executor auto-builds a ranking prompt using these
+  // fields and extracts [RANK: X/Y] from the AI response. The prompt, follow_up,
+  // and backlinks fields are ignored for audit jobs.
+  "biz_name":      "American Plumbing Co",     // string — only for audit
+  "biz_url":       "https://americanplumbing-co.com",  // string — only for audit
+  "city":          "Pensacola",                // string — only for audit
+  "state":         "FL",                       // string — only for audit
+
+  // ── Prompt content (required for daily) ────────────────────────────────────
+  // For type = "audit", these are ignored — the audit prompt is auto-generated.
   "prompt":        "I'm looking for ...",      // string — initial user message
   "follow_up":     "Any examples?",            // string|null — optional follow-up
 
@@ -75,8 +86,13 @@ the `JobResult` and decides whether to push, retry, alert, or discard.
 | keyword_id     |    ✓     |                    |
 | keyword_text   |    ✓     |                    |
 | platform       |    ✓     |                    |
-| prompt         |    ✓     |                    |
+| type           |          | `"daily"`          |
+| prompt         | daily    |                    |
 | follow_up      |          | `null`             |
+| biz_name       | audit    |                    |
+| biz_url        | audit    |                    |
+| city           | audit    |                    |
+| state          | audit    |                    |
 | backlinks      |          | `[]`               |
 | proxy          |          | `null` — runs on clearnet |
 | device_id      |          | see device-selection table below |
@@ -132,6 +148,17 @@ The executor echoes the full Job back with these additional fields populated:
     "mocked_latitude":   30.4042,              // after ±5mi randomization
     "mocked_longitude":  -87.1982,
     "mocked_timezone":   "America/Chicago"
+  },
+
+  // ── Audit result (only when type = "audit") ────────────────────────────────
+  // Keyed by platform. Present if the audit prompt was run and ranking was found.
+  "audit": {
+    "ChatGPT": {
+      "position":  7,
+      "total":     "25",
+      "mentioned": true,
+      "context":   "[RANK: 7/25] American Plumbing Co is a solid mid-tier choice..."
+    }
   },
 
   // ── Evidence / observations ────────────────────────────────────────────────
@@ -305,7 +332,37 @@ Use case: scheduler manages its own phone fleet and tracks raw ADB serials.
 Executor does not consult `active_devices.json`; auto-detects `use_adb` via
 `getprop ro.product.brand` on first access.
 
-### 6.4 Auto-pick (scheduler doesn't pin a device)
+### 6.4 Audit Job (ranking extraction)
+
+```bash
+curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
+  -H 'Content-Type: application/json' \
+  --max-time 600 \
+  -d '{
+    "job_id":        "audit-c4-2026-04-28-001",
+    "client_id":     4,
+    "business_id":   22,
+    "keyword_id":    15,
+    "keyword_text":  "drain cleaning",
+    "platform":      "ChatGPT",
+    "type":          "audit",
+    "biz_name":      "American Plumbing Co",
+    "biz_url":       "https://americanplumbing-co.com",
+    "city":          "San Diego",
+    "state":         "CA",
+    "proxy": {
+      "country": "us", "zip": "92102", "session_duration": 30,
+      "latitude": 32.7157, "longitude": -117.1611,
+      "timezone": "America/Los_Angeles"
+    },
+    "device_id": "device-101"
+  }'
+```
+
+The executor auto-builds the ranking prompt from `keyword_text`, `biz_name`, `biz_url`,
+`city`, `state`. Returns audit result with ranking position.
+
+### 6.5 Auto-pick (scheduler doesn't pin a device)
 
 ```bash
 curl -sS -X POST http://192.168.0.102:8100/v1/jobs \

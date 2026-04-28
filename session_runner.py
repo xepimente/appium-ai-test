@@ -17,9 +17,64 @@ from typing import Callable, Dict, List, Optional, Any
 from appium import webdriver
 from appium.options.android.uiautomator2.base import UiAutomator2Options
 
+import re
+
 from flows import clear_chrome, run_flow
 from flows_adb import run_flow_adb, clear_chrome as clear_chrome_adb
 from proxy import setup_device, teardown_device
+
+
+# ── Audit prompt + ranking extraction ─────────────────────────────────────────
+
+AUDIT_PROMPT_TEMPLATE = (
+    "Top 3 businesses for {keyword} in {city}, {state}. "
+    "Format: numbered list, each entry: name, 2-3 sentence description of why they stand out, "
+    "and whether they appear on Google Maps (yes/no). "
+    "Do not include any maps, images, or embedded content — text only. "
+    "After the list, rank {biz_name} ({biz_url}) among all businesses in this space. "
+    "You MUST include this exact line on its own: [RANK: X/Y] "
+    "where X is the position and Y is total businesses (e.g., [RANK: 7/25]). "
+    "Then one sentence explaining why. "
+    "Keep entire response under 200 words."
+)
+
+
+def _build_audit_prompt(job: dict) -> str:
+    return AUDIT_PROMPT_TEMPLATE.format(
+        keyword=job.get("keyword_text", ""),
+        city=job.get("city", ""),
+        state=job.get("state", ""),
+        biz_name=job.get("biz_name", ""),
+        biz_url=job.get("biz_url", job.get("gmb_url", "")),
+    )
+
+
+def _extract_ranking(response_text: str, biz_name: str, biz_url: str = "") -> dict:
+    if not response_text:
+        return {"position": None, "total": None, "mentioned": False, "context": ""}
+    text = response_text.strip()
+    biz_lower = biz_name.lower()
+    url_domain = ""
+    if biz_url:
+        url_domain = biz_url.lower().replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
+    text_lower = text.lower()
+    mentioned = biz_lower in text_lower or (url_domain and url_domain in text_lower)
+
+    for line in reversed(text.split("\n")):
+        s = line.strip()
+        if "e.g." in s.lower() or "example" in s.lower() or "where X" in s:
+            continue
+        m = re.search(r'\[RANK:\s*(\d+)\s*/\s*(\d+\+?)\]', s)
+        if m:
+            return {"position": int(m.group(1)), "total": m.group(2), "mentioned": True, "context": s[:200]}
+
+    for line in text.split("\n"):
+        if biz_lower in line.lower() and re.search(r'#\d+', line):
+            m = re.search(r'#(\d+)\s*(?:out of|/)\s*(\d+\+?)', line)
+            if m:
+                return {"position": int(m.group(1)), "total": m.group(2), "mentioned": True, "context": line.strip()[:200]}
+
+    return {"position": None, "total": None, "mentioned": mentioned, "context": ""}
 
 
 # ── Per-device locks (prevents ADB collisions on the same device) ──────────────
@@ -43,19 +98,40 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
                          platform: str, prompt: str, follow_up: Optional[str],
                          device_id: str, use_adb: bool,
                          backlinks: List,
-                         is_first: bool = True) -> Dict[str, Any]:
+                         is_first: bool = True,
+                         job_type: str = "daily",
+                         audit_meta: Optional[Dict] = None) -> Dict[str, Any]:
     """
     Run one platform flow on a specific device.
     Internal helper — does NOT manage proxy or locks.
 
     is_first: if True, clears Chrome and launches fresh.
               if False, Chrome is already open — just navigate to new platform.
+    job_type: "daily" for seeding sessions, "audit" for ranking audit.
+    audit_meta: dict with biz_name, biz_url, city, state — only needed for audit.
     """
     driver = None
     platform_start = time.time()
+
+    # Build audit prompt if this is an audit job
+    audit_result = None
+    if job_type == "audit" and audit_meta:
+        effective_prompt = _build_audit_prompt({
+            "keyword_text": prompt,
+            "city": audit_meta.get("city", ""),
+            "state": audit_meta.get("state", ""),
+            "biz_name": audit_meta.get("biz_name", ""),
+            "biz_url": audit_meta.get("biz_url", audit_meta.get("gmb_url", "")),
+        })
+        follow_up = None  # audit has no follow-up
+        backlinks = []    # audit doesn't click backlinks
+    else:
+        effective_prompt = prompt
+
     try:
         if use_adb:
-            print(f"[{device_id}] ADB-only mode — {platform}")
+            print(f"[{device_id}] ADB-only mode — {platform}" +
+                  (" [audit]" if job_type == "audit" else ""))
             if is_first:
                 clear_chrome_adb(full_serial)
                 time.sleep(1)
@@ -66,14 +142,15 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
                 )
                 time.sleep(3)
 
-            result = run_flow_adb(platform, full_serial, prompt, follow_up, backlinks=backlinks)
+            result = run_flow_adb(platform, full_serial, effective_prompt, follow_up, backlinks=backlinks)
 
         else:
+            # Chrome-stays-open optimization: proxy.py's preflight already opened Chrome
+            # to ifconfig.me and dismissed FRE. Skip pm clear + re-FRE — Appium will
+            # attach to the existing Chrome session and navigate the same tab to the
+            # platform URL. Saves ~10-15s and eliminates FRE-loop failures.
             if is_first:
-                print(f"[{device_id}] Clearing Chrome on {full_serial}...")
-                clear_chrome(full_serial)
-                time.sleep(1)
-
+                # Just lock orientation (no Chrome wipe)
                 subprocess.run(
                     ["adb", "-s", full_serial, "shell", "settings", "put", "system", "accelerometer_rotation", "0"],
                     capture_output=True, timeout=5,
@@ -88,7 +165,7 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
             options.device_name         = serial
             options.udid                = full_serial
             options.automation_name     = "UiAutomator2"
-            options.no_reset            = True if not is_first else False
+            options.no_reset            = True  # attach to existing Chrome from preflight
             options.new_command_timeout = 300
             options.orientation         = "PORTRAIT"
             options.app_package         = "com.android.chrome"
@@ -102,14 +179,24 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
             driver = webdriver.Remote(appium_url, options=options)
             driver.implicitly_wait(5)
 
-            result = run_flow(platform, driver, full_serial, prompt, follow_up, backlinks=backlinks)
+            result = run_flow(platform, driver, full_serial, effective_prompt, follow_up, backlinks=backlinks)
 
         success = result.get("status") == "success"
         duration = round(time.time() - platform_start, 1)
         error = result.get("error", "")
 
-        print(f"[{device_id}] {platform} {'SUCCESS' if success else 'FAILED'} — {duration}s{' — ' + error if error else ''}")
-        return {
+        # Extract ranking for audit jobs
+        if job_type == "audit" and audit_meta and success:
+            response_text = result.get("response_preview", "")
+            audit_result = _extract_ranking(
+                response_text,
+                audit_meta.get("biz_name", ""),
+                audit_meta.get("biz_url", audit_meta.get("gmb_url", "")),
+            )
+
+        print(f"[{device_id}] {platform} {'SUCCESS' if success else 'FAILED'} — {duration}s{' — ' + error if error else ''}" +
+              (f" rank={audit_result.get('position')}/{audit_result.get('total')}" if audit_result and audit_result.get('position') else ""))
+        ret = {
             "success":          success,
             "device_id":        device_id,
             "platform":         platform,
@@ -118,6 +205,9 @@ def _run_single_platform(serial: str, full_serial: str, port: int,
             "steps":            result.get("steps", []),
             "response_preview": result.get("response_preview", ""),
         }
+        if audit_result:
+            ret["audit"] = audit_result
+        return ret
 
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
@@ -160,6 +250,8 @@ def run_session(serial: str, full_serial: str, port: int,
     meta    = sess_meta if isinstance(sess_meta, dict) else {}
     use_adb   = meta.get("use_adb", False)
     backlinks = meta.get("backlinks", [])
+    job_type  = meta.get("type", "daily")
+    audit_meta = meta.get("audit_meta") or {}
     proxy_config = meta.get("proxy", None)
     if proxy_config:
         from proxy import enrich_proxy_config
@@ -186,6 +278,24 @@ def run_session(serial: str, full_serial: str, port: int,
             proxy_info["mocked_timezone"]  = tz_resp.get("timezone")
             proxy_info["base_latitude"]    = proxy_config.get("latitude")
             proxy_info["base_longitude"]   = proxy_config.get("longitude")
+            if proxy_info.get("status") == "ERROR":
+                # Preflight failed — don't waste time running the AI flow
+                print(f"[{device_id}] Preflight failed — skipping AI flow: {proxy_info.get('error')}")
+                return {
+                    "success":          False,
+                    "device_id":        device_id,
+                    "output":           "preflight_failed",
+                    "steps":            ["preflight_failed"],
+                    "proxy":            proxy_info,
+                    "platform_results": [{
+                        "success":   False,
+                        "device_id": device_id,
+                        "platform":  platforms[0] if platforms else platform,
+                        "duration_s": 0,
+                        "error":     proxy_info.get("error", "preflight_failed"),
+                        "steps":     ["preflight_failed"],
+                    }],
+                }
             if proxy_info.get("status") != "CONNECTED":
                 print(f"[{device_id}] Proxy connection failed — continuing without proxy")
             else:
@@ -202,6 +312,8 @@ def run_session(serial: str, full_serial: str, port: int,
                 platform=plat, prompt=prompt, follow_up=follow_up,
                 device_id=device_id, use_adb=use_adb, backlinks=backlinks,
                 is_first=(i == 0),
+                job_type=job_type,
+                audit_meta=audit_meta,
             )
             platform_results.append(result)
             all_steps.extend(result.get("steps", []))
@@ -230,8 +342,14 @@ def run_session(serial: str, full_serial: str, port: int,
             "",
         )
 
+        # Collect audit results from platform runs
+        audit_rankings = {}
+        for r in platform_results:
+            if r.get("audit"):
+                audit_rankings[r["platform"]] = r["audit"]
+
         print(f"[{device_id}] {'ALL PASSED' if overall_success else 'SOME FAILED'} — {output}")
-        return {
+        ret = {
             "success":          overall_success,
             "device_id":        device_id,
             "output":           output,
@@ -242,6 +360,9 @@ def run_session(serial: str, full_serial: str, port: int,
             "backlink_clicked": backlink_clicked,
             "response_preview": response_preview,
         }
+        if audit_rankings:
+            ret["audit"] = audit_rankings
+        return ret
 
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
@@ -302,6 +423,8 @@ def run_sequential(sessions: List[Dict], on_complete: Optional[Callable] = None)
                     "backlinks": sess.get("backlinks", []),
                     "proxy":     sess.get("proxy"),
                     "platforms": sess.get("platforms", [sess["platform"]]),
+                    "type":      sess.get("type", "daily"),
+                    "audit_meta": sess.get("audit_meta"),
                 },
             )
 
@@ -368,7 +491,15 @@ def run_parallel(sessions: List[Dict], on_complete: Optional[Callable] = None) -
             except Exception as e:
                 print(f"[{sess['device_id']}] on_complete error: {e}")
 
-    for sess in sessions:
+    # Stagger thread starts by ~4s. DM's adb-proxy socat bridge can't cleanly
+    # serve N simultaneous `am start` / `appops set` commands — responses get
+    # tangled and some phones end up with half-started SocksDroid (tun0 exists
+    # but no routing). A small gap lets each phone's setup finish DM work
+    # before the next one begins, then overlap fully on the AI flow.
+    STAGGER_SECONDS = 4
+    for i, sess in enumerate(sessions):
+        if i > 0:
+            time.sleep(STAGGER_SECONDS)
         t = threading.Thread(target=worker, args=(sess,), daemon=True)
         t.start()
         threads.append(t)
