@@ -29,9 +29,16 @@ the `JobResult` and decides whether to push, retry, alert, or discard.
   "follow_up":     "Any examples?",            // string|null — optional follow-up
 
   // ── Backlinks (optional) ───────────────────────────────────────────────────
-  // Strings that should be matched as substrings against any URL cited in the
-  // AI's response. First match wins and is clicked + briefly dwelled on.
-  "backlinks": ["medium.com", "clutch.co"],
+  // Matched against URLs cited in the AI's response sources panel. First match
+  // wins and is clicked + briefly dwelled on.
+  //
+  // For article backlinks, the url is the target. For GBP (Google Business
+  // Profile) backlinks, the maps.app.goo.gl short URL is never cited by AI —
+  // use embedded_url (the actual website inside the GBP) for matching instead.
+  "backlinks": [
+    {"url": "https://medium.com/@.../article",   "type": "article", "embedded_url": ""},
+    {"url": "https://maps.app.goo.gl/RLYdz9XmB", "type": "gbp",     "embedded_url": "https://americanplumbing-co.com"}
+  ],
 
   // ── Geolocation / proxy (optional) ─────────────────────────────────────────
   // If omitted, session runs on the Mac's clearnet IP with no GPS mock.
@@ -253,7 +260,7 @@ curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
     "platform":     "Perplexity",
     "prompt":       "I am looking for recommendations on local marketing agency in the Pensacola, FL area. A friend mentioned TestCo. Are they a solid choice, or are there stronger options locally? If you can, cite the sources or links you are using.",
     "follow_up":    "Got any specific examples of their recent work or reviews I can check?",
-    "backlinks":    ["medium.com", "clutch.co", "testco.com"],
+    "backlinks":    [{"url": "https://medium.com/@.../article", "type": "article", "embedded_url": ""}, {"url": "https://clutch.co/...", "type": "article", "embedded_url": ""}, {"url": "https://maps.app.goo.gl/...", "type": "gbp", "embedded_url": "https://testco.com"}],
     "proxy": {
       "country":          "us",
       "zip":              "32504",
@@ -284,7 +291,7 @@ curl -sS -X POST http://192.168.0.102:8100/v1/jobs \
     "platform":     "Perplexity",
     "prompt":       "...",
     "follow_up":    "...",
-    "backlinks":    ["clutch.co"],
+    "backlinks":    [{"url": "https://clutch.co/agencies/pensacola", "type": "article", "embedded_url": ""}],
     "proxy": {
       "country": "us", "zip": "32504", "session_duration": 30,
       "latitude": 30.4213, "longitude": -87.2169,
@@ -340,7 +347,7 @@ free pool entry. Returns `503 no_free_devices` if all pool entries are busy.
   "platform":     "Perplexity",
   "prompt":       "I am looking for recommendations on local marketing agency in the Pensacola, FL area. A friend mentioned TestCo...",
   "follow_up":    "Got any specific examples of their recent work or reviews I can check?",
-  "backlinks":    ["medium.com", "clutch.co", "testco.com"],
+  "backlinks":    [{"url": "https://medium.com/@.../article", "type": "article", "embedded_url": ""}, {"url": "https://clutch.co/...", "type": "article", "embedded_url": ""}, {"url": "https://maps.app.goo.gl/...", "type": "gbp", "embedded_url": "https://testco.com"}],
   "proxy": {
     "country":          "us",
     "zip":              "32504",
@@ -403,7 +410,7 @@ free pool entry. Returns `503 no_free_devices` if all pool entries are busy.
   "platform":     "Perplexity",
   "prompt":       "I am looking...",
   "follow_up":    "Got any specific...",
-  "backlinks":    ["clutch.co"],
+  "backlinks":    [{"url": "https://clutch.co/agencies/pensacola", "type": "article", "embedded_url": ""}],
   "proxy":        { "country": "us", "zip": "32504", ... },
   "device_id":    "device-102",
 
@@ -481,7 +488,7 @@ job = {
     "platform":     "Perplexity",
     "prompt":       "...",
     "follow_up":    "...",
-    "backlinks":    ["clutch.co"],
+    "backlinks":    [{"url": "https://clutch.co/agencies/pensacola", "type": "article", "embedded_url": ""}],
     "proxy": {
         "country": "us", "zip": "32504", "session_duration": 30,
         "latitude": 30.4213, "longitude": -87.2169,

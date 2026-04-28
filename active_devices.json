@@ -1,35 +1,70 @@
 {
   "device-101": {
-    "serial": "adb-149145555W006589-2W7yzb (2)._adb-tls-connect._tcp",
+    "serial": "192.168.0.116:5555",
     "port": 4731,
     "use_adb": true,
-    "brand": "Infinix",
-    "model": "Infinix X6725"
+    "brand": "vivo",
+    "model": "V2430"
   },
   "device-102": {
-    "serial": "adb-149145555W005208-27c1FH (2)._adb-tls-connect._tcp",
+    "serial": "192.168.0.119:5555",
     "port": 4732,
     "use_adb": true,
     "brand": "Infinix",
     "model": "Infinix X6725"
   },
   "device-103": {
-    "serial": "adb-149145555W006477-JjonPV (2)._adb-tls-connect._tcp",
+    "serial": "192.168.0.109:5555",
     "port": 4733,
     "use_adb": true,
     "brand": "Infinix",
     "model": "Infinix X6725"
   },
   "device-104": {
-    "serial": "adb-149145555W006788-Vb9M0e._adb-tls-connect._tcp",
+    "serial": "192.168.0.136:5555",
     "port": 4734,
+    "use_adb": true,
+    "brand": "nubia",
+    "model": "Z2460"
+  },
+  "device-105": {
+    "serial": "192.168.0.101:5555",
+    "port": 4735,
+    "use_adb": true,
+    "brand": "TECNO",
+    "model": "TECNO_KM4"
+  },
+  "device-106": {
+    "serial": "192.168.0.105:5555",
+    "port": 4736,
     "use_adb": true,
     "brand": "Infinix",
     "model": "Infinix X6725"
   },
-  "device-105": {
-    "serial": "adb-1490455613010287-g9bnc8._adb-tls-connect._tcp",
-    "port": 4735,
+  "device-107": {
+    "serial": "192.168.0.106:5555",
+    "port": 4737,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-108": {
+    "serial": "192.168.0.111:5555",
+    "port": 4738,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-109": {
+    "serial": "192.168.0.107:5555",
+    "port": 4739,
+    "use_adb": true,
+    "brand": "Infinix",
+    "model": "Infinix X6725"
+  },
+  "device-110": {
+    "serial": "192.168.0.110:5555",
+    "port": 4740,
     "use_adb": true,
     "brand": "Infinix",
     "model": "Infinix X6725"
