@@ -353,3 +353,76 @@ NEVER invent columns — always copy from the runner CSV's `reader.fieldnames`.
 - `docs/EXECUTOR_PAYLOAD.md` — Job / JobResult contract for the scheduler
 - `docs/DAILY_SESSION_RUNBOOK.md` — full runbook with pre-run checklist
 - `docs/MANUAL_RUN.md` — legacy manual run guide (gost details)
+
+---
+
+## 15. Audit (ranking) runner
+
+The same executor also runs **AEO ranking audits** via `run_audit.py`. This sends
+ranking prompts to all 3 platforms, screenshots the AI response, extracts
+`[RANK: X/Y]`, and saves results to `audit_results/`.
+
+### Input: `clients_for_audit.json`
+
+Generated from admin API for keywords without existing rankings:
+```json
+[{
+  "client_name": "American Plumbing Co",
+  "client_id": 4,
+  "biz_name": "American Plumbing Co",
+  "biz_url": "https://americanplumbing-co.com",
+  "city": "San Diego",
+  "state": "CA",
+  "biz_address": "422 21st St, San Diego, CA 92102",
+  "keywords": [
+    {"keyword": "drain cleaning", "keyword_id": 15}
+  ]
+}]
+```
+
+### Run audit
+
+```bash
+cd ~/projects/aeo-appium
+
+# One-time: build clients_for_audit.json from admin
+python3 << 'PYEOF'
+import requests, json
+H = {"X-Executor-Token": "..."}
+BASE = "https://jjm59vpn3y.us-east-1.awsapprunner.com"
+keywords = requests.get(f"{BASE}/api/keywords", headers=H).json()
+reports = requests.get(f"{BASE}/api/ranking-reports", headers=H).json()
+kw_ids_with_ranking = {rp.get("keywordId") for rp in reports if rp.get("keywordId")}
+# ... build clients_for_audit.json for keywords without rankings
+PYEOF
+
+# Run: 5 concurrent, 10 devices in pool, gost + Decodo + GPS
+nohup python3 -u run_audit.py > audit_run.log 2>&1 &
+
+# Monitor
+grep "PASS\|FAIL" audit_run.log
+```
+
+### Audit output
+
+- `audit_results/Gemini/`, `ChatGPT/`, `Perplexity/` — screenshots (PNG)
+- `audit_results/text/` — full AI responses (TXT)
+- `audit_results/audit_log.csv` — structured ranking data
+- `audit_results/audit_run_*.json` — full results including rankings per platform
+
+### Push rankings to admin
+
+```bash
+python3 push_audit_rankings.py  # POSTs to /api/ranking-reports
+```
+
+### Audit CSV columns (24 cols)
+
+```
+clientId, businessId, keywordId, keywordText, bizName, city, state,
+rankingPosition, rankingTotal, platform, isInitialRanking,
+durationSeconds, screenshotUrl,
+proxyIp, proxyCity, proxyRegion, proxyCountry, proxyZip,
+baseLatitude, baseLongitude, mockedLatitude, mockedLongitude,
+deviceIdentifier, createdAt
+```

@@ -26,6 +26,108 @@ KEYBOARD_HIDE_WAIT = 10
 
 # ── ADB Helpers ───────────────────────────────────────────────────────────────
 
+def _dismiss_chatgpt_login_popup(serial: str) -> bool:
+    """ChatGPT shows a 'Thanks for trying ChatGPT' modal with Log in / Sign up /
+    Stay logged out after some number of anonymous messages. It blocks all
+    input. Tap 'Stay logged out' when detected. Returns True if dismissed."""
+    try:
+        subprocess.run(["adb", "-s", serial, "shell", "uiautomator", "dump", "/sdcard/_popup.xml"],
+                       capture_output=True, timeout=5)
+        r = subprocess.run(["adb", "-s", serial, "shell", "cat", "/sdcard/_popup.xml"],
+                           capture_output=True, text=True, timeout=5)
+        if "Stay logged out" not in (r.stdout or ""):
+            return False
+    except Exception:
+        return False
+    if find_and_tap(serial, text="Stay logged out"):
+        print("  [popup] Dismissed ChatGPT login popup (Stay logged out)")
+        time.sleep(1.2)
+        return True
+    return False
+
+
+def _dismiss_chatgpt_consent_popups(serial: str) -> bool:
+    """Handle ChatGPT pre-chat consent modals that block input on first load:
+
+      1. Cookie banner: 'We use cookies' with Manage Cookies / Accept all /
+         Reject non-essential — tap Reject non-essential (least tracking).
+      2. ToS banner: 'By messaging ChatGPT' with Terms + Privacy Policy links —
+         close via the X button in the top-right of the modal.
+
+    Both appear BEFORE the user can type and are distinct from the post-chat
+    'Stay logged out' modal handled by _dismiss_chatgpt_login_popup. Returns
+    True if any consent popup was dismissed.
+    """
+    try:
+        subprocess.run(["adb", "-s", serial, "shell", "uiautomator", "dump", "/sdcard/_consent.xml"],
+                       capture_output=True, timeout=5)
+        r = subprocess.run(["adb", "-s", serial, "shell", "cat", "/sdcard/_consent.xml"],
+                           capture_output=True, text=True, timeout=5)
+        xml = r.stdout or ""
+    except Exception:
+        return False
+
+    dismissed = False
+
+    # Cookie banner — prefer Reject non-essential (minimal consent)
+    if "We use cookies" in xml or "Reject non-essential" in xml:
+        if find_and_tap(serial, text="Reject non-essential"):
+            print("  [popup] Dismissed cookie banner (Reject non-essential)")
+            time.sleep(1.5)
+            dismissed = True
+        elif find_and_tap(serial, text="Accept all"):
+            print("  [popup] Dismissed cookie banner (Accept all fallback)")
+            time.sleep(1.5)
+            dismissed = True
+
+    # ToS banner — 'By messaging ChatGPT, you agree to our Terms...'
+    # Appears either initially OR slides in ~1–2s AFTER cookie dismissal.
+    # Close button may be text="Close" (TECNO) or content-desc="Close" (vivo/nubia).
+    if dismissed:
+        # Let the ToS banner animate in before we check — otherwise the dump
+        # catches a mid-animation state where the banner isn't yet in the tree.
+        time.sleep(2)
+        try:
+            subprocess.run(["adb", "-s", serial, "shell", "uiautomator", "dump", "/sdcard/_consent2.xml"],
+                           capture_output=True, timeout=5)
+            r2 = subprocess.run(["adb", "-s", serial, "shell", "cat", "/sdcard/_consent2.xml"],
+                                capture_output=True, text=True, timeout=5)
+            xml = r2.stdout or xml
+        except Exception:
+            pass
+
+    if "By messaging ChatGPT" in xml or "you agree to our" in xml:
+        if find_and_tap(serial, text="Close") or find_and_tap(serial, content_desc="Close"):
+            print("  [popup] Dismissed ChatGPT ToS banner (Close X)")
+            time.sleep(1.2)
+            dismissed = True
+        else:
+            # Banner present but no Close hit — it's the persistent footer variant
+            # (no close button, just a text footer). Harmless: doesn't block input.
+            print("  [popup] ToS banner visible (no Close available — proceeding anyway)")
+
+    return dismissed
+
+
+def _timeout_dump(serial: str, platform: str, stage: str) -> None:
+    """Capture screen + UI hierarchy on generation/followup timeout for
+    post-mortem. Writes /tmp/timeout_<lastoct>_<platform>_<stage>.{png,xml}."""
+    last_oct = serial.replace(":", "_").replace(".", "_").split("_")[-2]
+    base = f"/tmp/timeout_{last_oct}_{platform}_{stage}"
+    try:
+        subprocess.run(["adb", "-s", serial, "shell", "screencap", "-p", "/sdcard/_t.png"],
+                       capture_output=True, timeout=8)
+        subprocess.run(["adb", "-s", serial, "pull", "/sdcard/_t.png", f"{base}.png"],
+                       capture_output=True, timeout=8)
+        subprocess.run(["adb", "-s", serial, "shell", "uiautomator", "dump", "/sdcard/_t.xml"],
+                       capture_output=True, timeout=8)
+        subprocess.run(["adb", "-s", serial, "pull", "/sdcard/_t.xml", f"{base}.xml"],
+                       capture_output=True, timeout=8)
+        print(f"  [timeout-dump] {base}.{{png,xml}}")
+    except Exception as e:
+        print(f"  [timeout-dump] failed: {e}")
+
+
 def _reconnect(serial):
     """Try to reconnect a device if ADB lost it."""
     try:
@@ -183,6 +285,18 @@ def dismiss_chrome_fre(serial):
             print("    Tapping: Close (Google Sign-in)")
             find_and_tap(serial, text="Close") or find_and_tap(serial, resource_id="negative_button")
             continue
+        # Google sign-in / "Make Chrome yours" style FRE variants
+        if "Make Chrome yours" in xml or "Sign in to Chrome" in xml or \
+           "Continue as" in xml or "Get the most out of Chrome" in xml or \
+           "Welcome to Chrome" in xml or "Turn on sync" in xml:
+            print("    Tapping: Skip/No thanks/Not now (Google FRE variant)")
+            find_and_tap(serial, text="Skip") or \
+                find_and_tap(serial, text="Not now") or \
+                find_and_tap(serial, text="No thanks") or \
+                find_and_tap(serial, text="Maybe later") or \
+                find_and_tap(serial, resource_id="negative_button") or \
+                find_and_tap(serial, resource_id="signin_fre_dismiss_button")
+            continue
         if "search_box_text" in xml or "url_bar" in xml:
             print("    FRE done — address bar visible")
             break
@@ -228,6 +342,18 @@ def wait_for_page_ready(serial, platform=None, max_wait=45, url=None):
         if "Your device works better" in xml or "works better with a" in xml:
             print("    Dismissing: Google Sign-in popup")
             find_and_tap(serial, text="Close") or find_and_tap(serial, resource_id="negative_button")
+            time.sleep(2)
+            continue
+        if "Make Chrome yours" in xml or "Sign in to Chrome" in xml or \
+           "Continue as" in xml or "Get the most out of Chrome" in xml or \
+           "Welcome to Chrome" in xml or "Turn on sync" in xml:
+            print("    Dismissing: Google FRE variant mid-nav")
+            find_and_tap(serial, text="Skip") or \
+                find_and_tap(serial, text="Not now") or \
+                find_and_tap(serial, text="No thanks") or \
+                find_and_tap(serial, text="Maybe later") or \
+                find_and_tap(serial, resource_id="negative_button") or \
+                find_and_tap(serial, resource_id="signin_fre_dismiss_button")
             time.sleep(2)
             continue
 
@@ -289,6 +415,21 @@ def type_text(serial, text):
         if i < len(words) - 1:
             adb(serial, "shell", "input", "keyevent", "62")  # SPACE
         time.sleep(0.02)
+
+
+def paste_text(serial, text):
+    """Paste text via Android clipboard + KEYCODE_PASTE (Android 7+).
+    Same method used by scrcpy — fast and reliable."""
+    # Escape single quotes for shell
+    escaped = text.replace("'", "'\\''")
+    # Set system clipboard (Android 8+)
+    subprocess.run(
+        ["adb", "-s", serial, "shell", f"cmd clipboard set '{escaped}'"],
+        capture_output=True, text=True, timeout=5
+    )
+    time.sleep(0.1)
+    # Send PASTE keyevent
+    adb(serial, "shell", "input", "keyevent", "279", timeout=5)
 
 
 def _input_still_has_text(serial, min_len: int = 20) -> bool:
@@ -410,12 +551,13 @@ def hide_keyboard(serial):
 
 
 def adb_scroll(serial, swipes=12, px=400, duration_ms=700, pause_s=2.2):
-    """Scroll via ADB. Hides keyboard first, uses left edge to avoid map widgets."""
+    """Scroll via ADB. Hides keyboard first, uses far-right edge to avoid
+    map widgets and carousel scrollers embedded in AI-platform results."""
     hide_keyboard(serial)
     w, h = get_screen_size(serial)
     start_y = int(h * 0.7)
     end_y = start_y - px
-    scroll_x = int(w * 0.3)
+    scroll_x = int(w * 0.95)
     for i in range(swipes):
         swipe(serial, scroll_x, start_y, scroll_x, end_y, duration_ms)
         time.sleep(pause_s)
@@ -492,23 +634,16 @@ def wait_for_generation(serial, max_wait=GENERATION_TIMEOUT):
 
 # ── Backlink Click (Type 3) ────────────────────────────────────────────────────
 
-def click_backlink_adb(serial, backlinks, cdp_port=9222):
+def click_backlink_adb(serial, backlinks, cdp_port=None):
+    """Find and click a matching backlink in the AI response sources.
+
+    If cdp_port is None, picks a per-serial deterministic port via
+    proxy.cdp_port_for_serial (avoids `adb forward tcp:9222` collisions
+    when multiple phones run in parallel).
     """
-    Find and click a matching backlink in the AI response sources.
-
-    Strategy: CDP first (can scan entire page DOM including off-screen content),
-    then fall back to UI dump if CDP fails.
-
-    After clicking, stays on the backlink page for ~5 seconds with scrolling.
-
-    Args:
-        serial: ADB device serial
-        backlinks: list of backlink URLs to look for
-        cdp_port: CDP port for this device
-
-    Returns:
-        The matched URL string, or None if no match found.
-    """
+    if cdp_port is None:
+        from proxy import cdp_port_for_serial
+        cdp_port = cdp_port_for_serial(serial)
     if not backlinks:
         return None
 
@@ -792,6 +927,7 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
     print("  Waiting for generation...")
     gen_ok = wait_for_generation(serial)
     if not gen_ok:
+        _timeout_dump(serial, "gemini", "gen")
         steps.append("generation_timeout")
         return {"status": "error", "error": "generation_timeout: no response", "steps": steps}
     # Verify the submit actually landed — catches tap-missed and platform errors
@@ -828,6 +964,7 @@ def run_gemini(serial, prompt, follow_up=None, backlinks=None):
         print("  Waiting for follow-up generation...")
         fu_ok = wait_for_generation(serial)
         if not fu_ok:
+            _timeout_dump(serial, "gemini", "followup")
             steps.append("followup_timeout")
             return {"status": "error", "error": "followup_timeout: no response", "steps": steps}
         fu_submit_ok, fu_reason = verify_submit_succeeded(serial)
@@ -860,6 +997,11 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
 
     time.sleep(5)
 
+    # Dismiss any pre-chat consent popups (cookie banner, ToS modal)
+    if _dismiss_chatgpt_consent_popups(serial):
+        steps.append("dismissed_consent")
+        time.sleep(1)
+
     # Find input
     if not find_and_tap(serial, resource_id="prompt-textarea"):
         if not find_and_tap(serial, text="Ask anything"):
@@ -878,8 +1020,21 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
 
     gen_ok = wait_for_generation(serial)
     if not gen_ok:
-        steps.append("generation_timeout")
-        return {"status": "error", "error": "generation_timeout: no response", "steps": steps}
+        # Popup may have appeared and blocked submission. Dismiss + retry once.
+        if _dismiss_chatgpt_login_popup(serial):
+            steps.append("dismissed_login_popup_pre_gen")
+            find_and_tap(serial, resource_id="prompt-textarea") or \
+                find_and_tap(serial, text="Ask anything")
+            time.sleep(1)
+            type_text(serial, prompt)
+            time.sleep(0.5)
+            find_and_tap(serial, resource_id="composer-submit-button") or \
+                find_and_tap(serial, content_desc="Send prompt")
+            gen_ok = wait_for_generation(serial)
+        if not gen_ok:
+            _timeout_dump(serial, "chatgpt", "gen")
+            steps.append("generation_timeout")
+            return {"status": "error", "error": "generation_timeout: no response", "steps": steps}
     submit_ok, submit_reason = verify_submit_succeeded(serial)
     if not submit_ok:
         steps.append(f"verify_failed:{submit_reason}")
@@ -891,6 +1046,8 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
 
     if follow_up and follow_up.strip():
         time.sleep(2)
+        if _dismiss_chatgpt_login_popup(serial):
+            steps.append("dismissed_login_popup")
         find_and_tap(serial, resource_id="prompt-textarea") or \
             find_and_tap(serial, text="Ask anything")
         time.sleep(1)
@@ -901,8 +1058,21 @@ def run_chatgpt(serial, prompt, follow_up=None, backlinks=None):
         steps.append("sent_followup")
         fu_ok = wait_for_generation(serial)
         if not fu_ok:
-            steps.append("followup_timeout")
-            return {"status": "error", "error": "followup_timeout: no response", "steps": steps}
+            if _dismiss_chatgpt_login_popup(serial):
+                steps.append("dismissed_login_popup_mid_followup")
+                # Retry follow-up once after dismissing
+                find_and_tap(serial, resource_id="prompt-textarea") or \
+                    find_and_tap(serial, text="Ask anything")
+                time.sleep(1)
+                type_text(serial, follow_up)
+                time.sleep(0.5)
+                find_and_tap(serial, resource_id="composer-submit-button") or \
+                    find_and_tap(serial, content_desc="Send prompt")
+                fu_ok = wait_for_generation(serial)
+            if not fu_ok:
+                _timeout_dump(serial, "chatgpt", "followup")
+                steps.append("followup_timeout")
+                return {"status": "error", "error": "followup_timeout: no response", "steps": steps}
         fu_submit_ok, fu_reason = verify_submit_succeeded(serial)
         if not fu_submit_ok:
             steps.append(f"followup_verify_failed:{fu_reason}")
@@ -999,6 +1169,7 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
     print("  Waiting for generation...")
     gen_ok = wait_for_generation(serial)
     if not gen_ok:
+        _timeout_dump(serial, "perplexity", "gen")
         steps.append("generation_timeout")
         return {"status": "error", "error": "generation_timeout: no response", "steps": steps}
     # Verify the submit actually landed — catches tap-missed and platform errors
@@ -1025,6 +1196,7 @@ def run_perplexity(serial, prompt, follow_up=None, backlinks=None):
         steps.append("sent_followup")
         fu_ok = wait_for_generation(serial)
         if not fu_ok:
+            _timeout_dump(serial, "perplexity", "followup")
             steps.append("followup_timeout")
             return {"status": "error", "error": "followup_timeout: no response", "steps": steps}
         fu_submit_ok, fu_reason = verify_submit_succeeded(serial)

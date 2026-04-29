@@ -346,8 +346,9 @@ def _render_audit_prompt(client, keyword):
 # ── ADB Imports ──────────────────────────────────────────────────────────────
 
 from flows_adb import (
-    adb, clear_chrome, dismiss_chrome_fre, navigate_to_url as adb_navigate,
-    type_text, find_and_tap, wait_for_generation as adb_wait_gen,
+    adb, clear_chrome, dismiss_chrome_fre, _dismiss_chatgpt_consent_popups,
+    navigate_to_url as adb_navigate,
+    type_text, paste_text, find_and_tap, wait_for_generation as adb_wait_gen,
     tap, dump_ui, hide_keyboard, get_screen_size as adb_screen_size,
     wait_for_page_ready, keep_screen_on,
 )
@@ -574,6 +575,9 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=T
         if login_check == 0:
             time.sleep(3)
 
+    # Dismiss cookie + ToS consent popups
+    _dismiss_chatgpt_consent_popups(serial)
+
     # Type + send
     w, h = adb_screen_size(serial)
     if not find_and_tap(serial, resource_id="prompt-textarea"):
@@ -654,6 +658,21 @@ def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222, is_firs
     wait_for_page_ready(serial, platform="perplexity")
     time.sleep(2)
     dismiss_perplexity_comet_adb(serial)
+
+    # Dismiss Cookie Policy banner (blocks input tap otherwise)
+    for _ in range(3):
+        xml = dump_ui(serial)
+        if not any(t in xml for t in ["Cookie Policy", "Accept All Cookies",
+                                       "Necessary Cookies", "Got it"]):
+            break
+        tapped = (find_and_tap(serial, text="Got it")
+                  or find_and_tap(serial, text="Necessary Cookies")
+                  or find_and_tap(serial, text="Accept All Cookies")
+                  or find_and_tap(serial, text="Accept"))
+        if tapped:
+            time.sleep(1)
+        else:
+            break
 
     # Type + send — try CDP focus first, then ADB tap fallback
     w, h = adb_screen_size(serial)

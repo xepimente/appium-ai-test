@@ -252,3 +252,38 @@ Expand the AEO audit system to reliably support 12 Android device brands in para
 - Fixed remainder plan builder: keyword_text vs keyword field mismatch between plan and CSV
 - Consolidated CSV format: 208 rows matching previous pattern (Apr 24 had 240 rows, 190p+50f)
 - Cleaned up intermediate CSVs, retry queues, and old April 24-25 pass files
+
+---
+
+### Worklog — Apr 28-29, 2026 (Tue-Wed) — 6 hours
+
+**Title:** AEO Daily Session Run (225 jobs) + Ranking Audit (199 keywords, 417 rankings) + Audit Proxy/Gost Integration
+
+**Branch:** `adb-and-appium-flow`
+
+- Ran full daily AEO session: 225 jobs, 45 campaigns, 35 clients across 5 devices
+  - Main run: 179/225 PASS (79.5%), 3 remainder retries
+  - Final CSV: 247 rows (225 pass + 22 fail), pass_01-05 (50/50/50/50/25)
+  - Main issue: gost crashes + generation timeouts on specific zips
+- Built parallel ranking audit flow with Decodo proxy + gost + GPS:
+  - Added gost/proxy setup to `audit.py` — same pattern as `_run_single_session` from daily runner
+  - Optimizations: AEO_SKIP_PREFLIGHT=1 (saves 15-20s), lat/lng in proxy config (avoids get_device_ip hang), is_first only on first platform (avoids redundant Chrome clear)
+  - Tested 1 device × 3 platforms: ~387s total (Gemini 122s, ChatGPT 106s, Perplexity 152s)
+  - Full run: 199 keywords × 3 platforms = 597 audits across 5 devices, ~4 hours
+- Added platform popup handling to audit functions:
+  - ChatGPT: `_dismiss_chatgpt_consent_popups()` for cookie + ToS banners
+  - Perplexity: Cookie Policy banner dismissal
+  - Gemini: mic permission + app banner already handled
+- Investigated 10-device network issue:
+  - Root cause: macOS ephemeral port exhaustion (default 16K ports, 30s TIME_WAIT)
+  - Applied sysctl tuning: `portrange.first=16384`, `tcp.msl=1000`, `somaxconn=2048`
+  - 10 devices pass quick proxy test but fail under sustained AI generation load
+  - 5 concurrent is the proven safe limit
+- Device DHCP IP refresh: updated active_devices.json for IP shifts, switched to USB serials for stability
+- Pushed 404 rankings to admin via POST /api/ranking-reports with business-hours timestamps
+- Built audit_rankings_2026-04-28.csv — 417 rows, 180 keywords, 14 columns
+- Generated audit plan for remaining 28 keywords without rankings
+- Fixed paste_text() in flows_adb.py using cmd clipboard set + KEYCODE_PASTE (scrcpy method)
+- Updated docs/EXECUTOR_PAYLOAD.md with type:audit contract, backlinks object format
+- Updated docs/FRESH_MAC_SETUP.md for current docker + run_daily_all flow
+- Zipped audit results (110MB) and cleaned originals
