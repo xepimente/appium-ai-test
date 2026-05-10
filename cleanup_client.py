@@ -3,11 +3,12 @@
 Usage: python3 cleanup_client.py <clientId> [--dry]
 """
 from __future__ import annotations
+import os
 import sys, requests, json
 from datetime import datetime, timezone, timedelta
 
 ADMIN = "https://jjm59vpn3y.us-east-1.awsapprunner.com"
-TOKEN = "89d0385d06ab80d79a034745c978a298f4728c85066616f359cb8b9bb87e5644"
+TOKEN = os.environ["EXECUTOR_TOKEN"]
 H = {"X-Executor-Token": TOKEN, "Content-Type": "application/json"}
 
 
