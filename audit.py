@@ -32,6 +32,8 @@ import subprocess
 import threading
 import time
 
+import requests
+
 from screenshot import take_screenshot, scroll_response_to_top, extract_response_text, get_screen_size
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -60,14 +62,51 @@ PLATFORM_URLS = {
     "Perplexity": "https://www.perplexity.ai",
 }
 
+# Admin LLM service for audit prompt generation with rotated keyword variants
+ADMIN_URL = os.environ.get("ADMIN_URL", "https://jjm59vpn3y.us-east-1.awsapprunner.com")
+ADMIN_TOKEN = os.environ.get(
+    "ADMIN_TOKEN",
+    os.environ["EXECUTOR_TOKEN"],
+)
+LLM_BUILD_AUDIT_URL = f"{ADMIN_URL}/api/llm/build-audit"
+LLM_REQUEST_TIMEOUT = 15  # seconds
+
 
 def slugify(text):
     """Convert text to a URL-friendly slug."""
     return re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')[:60]
 
 
-def build_audit_prompt(client):
-    return AUDIT_PROMPT_TEMPLATE.format(**client)
+def _local_audit_prompt(client):
+    """Render the audit prompt locally from AUDIT_PROMPT_TEMPLATE.
+
+    Used as a fallback when the admin LLM service is unreachable. Expects
+    `client` to contain `keyword`, `city`, `state`, `biz_name`, `biz_url`."""
+    return AUDIT_PROMPT_TEMPLATE.format(
+        keyword=client.get("keyword", ""),
+        city=client.get("city", "") or "",
+        state=client.get("state", "") or "",
+        biz_name=client.get("biz_name", "") or "",
+        biz_url=client.get("biz_url", "") or "",
+    )
+
+
+def build_audit_prompt(client, platform="ChatGPT"):
+    """Build an audit prompt using the PARENT keyword (no variant rotation).
+
+    Audit ranking measures where a business sits for its canonical keyword,
+    so we always render the prompt from the parent `keyword` text via
+    AUDIT_PROMPT_TEMPLATE. Variant rotation is only for daily sessions
+    (where we want to vary the AI's phrasing to avoid memorization).
+
+    Args:
+        client: dict containing `keyword`/`city`/`state`/`biz_name`/`biz_url`.
+        platform: unused — kept for signature compat with daily callers.
+
+    Returns:
+        (prompt_text, variant_id) — variant_id is always None for audits.
+    """
+    return _local_audit_prompt(client), None
 
 
 def format_response_text(raw_text, platform):
@@ -125,6 +164,39 @@ def format_response_text(raw_text, platform):
             numbered.append(line)
 
     return "\n\n".join(numbered)
+
+
+# Landing-page / login-wall markers that prove the model never received the
+# prompt. Hit any of these and the row is `flow_failed`, not success.
+_LANDING_MARKERS = (
+    "What do you want to know?",
+    "Type / for search modes",
+    "Where should we begin?",
+    "What's on the agenda today?",
+    "What’s on the agenda today?",
+    "By messaging ChatGPT",
+    "Skip to content",
+)
+
+
+def classify_audit_outcome(response_text: str, ranking: dict) -> str:
+    """Decide the row's status field from the actual reply.
+
+    Returns one of:
+      - "success"     — `[RANK: X/Y]` or fuzzy match found
+      - "no_rank"     — model replied with content but the rank line is missing
+                        (prompt-compliance issue, not a flow issue)
+      - "flow_failed" — empty reply, or reply is a landing/login page artifact
+                        (the prompt never reached the model)
+    """
+    if ranking.get("position"):
+        return "success"
+    text = (response_text or "").strip()
+    if not text or len(text) < 80:
+        return "flow_failed"
+    if any(m in text for m in _LANDING_MARKERS):
+        return "flow_failed"
+    return "no_rank"
 
 
 def extract_ranking(response_text, biz_name, biz_url=""):
@@ -269,7 +341,7 @@ CSV_COLUMNS = [
     "rank_position", "rank_total", "mentioned", "rank_context",
     "screenshot", "response_text", "error",
     "proxy_ip", "proxy_city", "proxy_region", "proxy_zip",
-    "prompt",
+    "prompt", "variant_id",
 ]
 
 _csv_lock = threading.Lock()
@@ -285,14 +357,22 @@ def _ensure_csv_header():
 
 
 def log_entry(client, keyword, platform, mode, device, status, screenshot_path, text_path,
-              error=None, proxy_info=None, duration_s=None, ranking=None):
-    """Append one row to the audit CSV log."""
+              error=None, proxy_info=None, duration_s=None, ranking=None,
+              prompt_text=None, variant_id=None):
+    """Append one row to the audit CSV log.
+
+    prompt_text and variant_id should be the actual prompt sent to the AI
+    (returned by build_audit_prompt). Falls back to re-rendering locally if
+    not provided (e.g. error path before the prompt was built)."""
     ranking = ranking or {}
     proxy_info = proxy_info or {}
 
+    if prompt_text is None:
+        prompt_text = _render_audit_prompt(client, keyword)
+
     row = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "client_id": client.get("id", 0),
+        "client_id": client.get("client_id") or client.get("id", 0),
         "biz_name": client.get("biz_name", ""),
         "campaign_id": client.get("campaign_id", "") or client.get("aeo_plan_id", ""),
         "campaign_name": client.get("campaign_name", "") or client.get("plan_name", ""),
@@ -313,7 +393,8 @@ def log_entry(client, keyword, platform, mode, device, status, screenshot_path, 
         "proxy_city": proxy_info.get("ip_city", ""),
         "proxy_region": proxy_info.get("ip_region", ""),
         "proxy_zip": proxy_info.get("ip_zip", ""),
-        "prompt": _render_audit_prompt(client, keyword),
+        "prompt": prompt_text or "",
+        "variant_id": variant_id if variant_id is not None else "",
     }
 
     with _csv_lock:
@@ -439,18 +520,34 @@ def dismiss_perplexity_comet_adb(serial):
 # ── File Naming ──────────────────────────────────────────────────────────────
 
 def make_paths(client, keyword, platform, timestamp):
-    """Generate file paths for screenshot and text."""
-    client_id = client.get("id", 0)
-    slug = slugify(keyword)
-    basename = f"{client_id}_{slug}_{timestamp}"
+    """Generate file paths for screenshot and text.
+
+    Screenshot follows the S3 zip convention (must match device-agent path):
+        audit_results/<TitleCasePlatform>/kw{keyword_id}_{platform.lower()}_{unix_ts}.png
+    Text retains the legacy slug-based name since it is not bundled into the S3 zip."""
+    keyword_id = None
+    for kw in client.get("keywords", []):
+        if isinstance(kw, dict) and kw.get("keyword") == keyword:
+            keyword_id = kw.get("keyword_id")
+            break
+    if keyword_id is None:
+        raise ValueError(
+            f"keyword_id not found for keyword={keyword!r} in client="
+            f"{client.get('biz_name', client.get('id', '?'))}"
+        )
+
+    unix_ts = int(time.time())
+    ss_basename = f"kw{int(keyword_id)}_{platform.lower()}_{unix_ts}"
 
     ss_dir = os.path.join(OUTPUT_DIR, platform)
     text_dir = os.path.join(OUTPUT_DIR, "text")
     os.makedirs(ss_dir, exist_ok=True)
     os.makedirs(text_dir, exist_ok=True)
 
-    ss_path = os.path.join(ss_dir, f"{basename}.png")
-    text_path = os.path.join(text_dir, f"{basename}_{platform}.txt")
+    ss_path = os.path.join(ss_dir, f"{ss_basename}.png")
+    client_id = client.get("id", 0)
+    slug = slugify(keyword)
+    text_path = os.path.join(text_dir, f"{client_id}_{slug}_{timestamp}_{platform}.txt")
     return ss_path, text_path
 
 
@@ -578,6 +675,22 @@ def audit_chatgpt_adb(serial, client, keyword, prompt, cdp_port=9222, is_first=T
     # Dismiss cookie + ToS consent popups
     _dismiss_chatgpt_consent_popups(serial)
 
+    # Pre-submit login-wall check — if landing-page text AND no composer,
+    # ChatGPT is gating behind login. Fast-fail rather than waiting 60s for
+    # a response that won't come.
+    xml = dump_ui(serial)
+    landing_text = ("Where should we begin" in xml
+                    or "What's on the agenda today" in xml
+                    or "What’s on the agenda today" in xml)
+    has_composer = ("prompt-textarea" in xml
+                    or "composer-submit-button" in xml)
+    if landing_text and not has_composer:
+        print("    ChatGPT unauth'd landing (no composer) — skipping (flow_failed)")
+        with open(text_path, "w") as f:
+            f.write("Skip to content\nChatGPT\nLog in\nWhere should we begin?\n")
+        take_screenshot(serial, output_path=ss_path)
+        return ss_path, text_path, timestamp
+
     # Type + send
     w, h = adb_screen_size(serial)
     if not find_and_tap(serial, resource_id="prompt-textarea"):
@@ -656,23 +769,28 @@ def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222, is_firs
         dismiss_chrome_fre(serial)
 
     wait_for_page_ready(serial, platform="perplexity")
-    time.sleep(2)
+    # Wait longer for late-appearing popups (Cookie/Comet/Chrome FRE under fresh proxy IP).
+    # Mirrors the FlowEngine.kt fix for the daily flow: don't probe too early.
+    time.sleep(2.5)
     dismiss_perplexity_comet_adb(serial)
 
-    # Dismiss Cookie Policy banner (blocks input tap otherwise)
-    for _ in range(3):
+    # Re-dismiss Chrome FRE in case a late one appeared after page load.
+    # Unlike line 753, this fires regardless of is_first.
+    dismiss_chrome_fre(serial)
+
+    # Dismiss Cookie Policy banner (blocks input tap otherwise).
+    # Run 5 iterations and DON'T break early — popup can appear late after a
+    # network round-trip; if we miss it on the first pass we miss it forever.
+    for i in range(5):
+        time.sleep(0.5)
         xml = dump_ui(serial)
-        if not any(t in xml for t in ["Cookie Policy", "Accept All Cookies",
-                                       "Necessary Cookies", "Got it"]):
-            break
-        tapped = (find_and_tap(serial, text="Got it")
-                  or find_and_tap(serial, text="Necessary Cookies")
-                  or find_and_tap(serial, text="Accept All Cookies")
-                  or find_and_tap(serial, text="Accept"))
-        if tapped:
-            time.sleep(1)
-        else:
-            break
+        if any(t in xml for t in ["Cookie Policy", "Accept All Cookies",
+                                  "Necessary Cookies", "Got it"]):
+            (find_and_tap(serial, text="Got it")
+             or find_and_tap(serial, text="Necessary Cookies")
+             or find_and_tap(serial, text="Accept All Cookies")
+             or find_and_tap(serial, text="Accept"))
+            time.sleep(0.8)
 
     # Type + send — try CDP focus first, then ADB tap fallback
     w, h = adb_screen_size(serial)
@@ -752,6 +870,22 @@ def audit_perplexity_adb(serial, client, keyword, prompt, cdp_port=9222, is_firs
 
     adb_wait_gen(serial)
     time.sleep(3)
+
+    # Post-wait DOM verify — if placeholder still visible AND no response markers,
+    # submit silently failed. Fast-fail rather than extracting placeholder text.
+    xml = dump_ui(serial)
+    placeholder_still = ("What do you want to know?" in xml
+                         or "Type / for search modes" in xml)
+    has_response = ("Stop streaming" in xml
+                    or "Stop generating" in xml
+                    or "Sources" in xml
+                    or "Citations" in xml)
+    if placeholder_still and not has_response:
+        print("    Perplexity placeholder still showing — submit didn't fire (flow_failed)")
+        with open(text_path, "w") as f:
+            f.write("What do you want to know?\nType / for search modes\n")
+        take_screenshot(serial, output_path=ss_path)
+        return ss_path, text_path, timestamp
 
     # Screenshot — scroll first, then remove banner + zoom right before capture
     scroll_response_to_top(serial, "Perplexity", local_port=cdp_port)
@@ -984,10 +1118,10 @@ def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port
     Returns:
         dict with status, screenshot, text, timestamp
     """
-    prompt = build_audit_prompt({**client, "keyword": keyword})
+    prompt, variant_id = build_audit_prompt({**client, "keyword": keyword}, platform)
 
     print(f"\n{'='*60}")
-    print(f"AUDIT: {platform} ({mode.upper()}) [CDP port {cdp_port}]")
+    print(f"AUDIT: {platform} ({mode.upper()}) [CDP port {cdp_port}] variant={variant_id}")
     print(f"Client: {client['biz_name']} | Keyword: {keyword}")
     print(f"Device: {serial[:40]}...")
     print(f"{'='*60}")
@@ -1018,10 +1152,12 @@ def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port
         ranking = extract_ranking(response_text, client.get("biz_name", ""),
                                   client.get("biz_url", ""))
 
+        outcome = classify_audit_outcome(response_text, ranking)
+
         entry = log_entry(client, keyword, platform, mode, serial,
-                          "success", ss_path, text_path,
+                          outcome, ss_path, text_path,
                           proxy_info=proxy_info, duration_s=duration,
-                          ranking=ranking)
+                          ranking=ranking, prompt_text=prompt, variant_id=variant_id)
 
         # Rewrite text file with formatted text + ranking summary
         if response_text:
@@ -1048,8 +1184,8 @@ def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port
         print(f"\n  Screenshot: {ss_path}")
         print(f"  Text: {text_path}")
         print(f"  Ranking: {pos_str}")
-        print(f"  Status: SUCCESS ({duration}s)")
-        return {"status": "success", "screenshot": ss_path, "text": text_path,
+        print(f"  Status: {outcome.upper()} ({duration}s)")
+        return {"status": outcome, "screenshot": ss_path, "text": text_path,
                 "timestamp": timestamp, "ranking": ranking}
 
     except Exception as e:
@@ -1058,7 +1194,8 @@ def run_audit(client, keyword, platform, serial, mode="adb", port=4723, cdp_port
         print(f"\n  ERROR: {error_msg}")
         log_entry(client, keyword, platform, mode, serial,
                   "error", "", "", error=error_msg,
-                  proxy_info=proxy_info, duration_s=duration)
+                  proxy_info=proxy_info, duration_s=duration,
+                  prompt_text=prompt, variant_id=variant_id)
         return {"status": "error", "error": error_msg}
 
 
@@ -1087,6 +1224,9 @@ def main():
     parser.add_argument("--test", action="store_true", help="Use test client (no clients.json)")
     parser.add_argument("--platform", choices=PLATFORMS, help="Single platform only")
     parser.add_argument("--clients", type=int, help="Limit to first N clients")
+    parser.add_argument("--client-id", type=int, help="Filter clients.json to one client_id")
+    parser.add_argument("--keyword-id", type=int, help="Filter to one keyword_id (across all clients)")
+    parser.add_argument("--client-json", default="clients.json", help="Path to clients.json")
     parser.add_argument("--serial", help="Override device serial")
     parser.add_argument("--mode", choices=["adb", "appium"], default="adb")
     parser.add_argument("--port", type=int, default=4723, help="Appium port")
@@ -1103,8 +1243,19 @@ def main():
     if args.test:
         clients = [TEST_CLIENT]
     else:
-        with open("clients.json") as f:
+        with open(args.client_json) as f:
             clients = json.load(f)
+        if args.client_id is not None:
+            clients = [c for c in clients if c.get("client_id") == args.client_id]
+        if args.keyword_id is not None:
+            filtered = []
+            for c in clients:
+                kws = [k for k in c.get("keywords", [])
+                       if isinstance(k, dict) and k.get("keyword_id") == args.keyword_id]
+                if kws:
+                    nc = dict(c); nc["keywords"] = kws
+                    filtered.append(nc)
+            clients = filtered
         if args.clients:
             clients = clients[:args.clients]
 
@@ -1344,7 +1495,11 @@ def main():
             time.sleep(3)
             is_first_job = False
 
-        # Run all platforms for this keyword under same proxy
+        # Run all platforms for this keyword under same proxy.
+        # Use per-serial CDP port so parallel audit.py subprocesses (e.g. the
+        # consumer's audit_dispatch fan-out) don't collide on tcp:9222.
+        from proxy import cdp_port_for_serial
+        cdp_port = cdp_port_for_serial(args.serial)
         for platform in platforms:
             result = run_audit(
                 client=client,
@@ -1353,6 +1508,7 @@ def main():
                 serial=args.serial,
                 mode=args.mode,
                 port=args.port,
+                cdp_port=cdp_port,
                 proxy_info=proxy_info,
                 is_first=is_first_platform,
             )
