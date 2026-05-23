@@ -1,0 +1,2313 @@
+[
+  {
+    "client_name": "Mark Tegenkamp",
+    "client_id": 4,
+    "biz_name": "My EYE GUY Coffee Guy",
+    "biz_id": 6,
+    "biz_url": "https://maps.app.goo.gl/NYBPWHGEgpjAKQtLA",
+    "city": "Pensacola",
+    "state": "FL",
+    "biz_address": "6700 N Davis Hwy",
+    "keywords": [
+      {
+        "keyword": "walk in eye exam",
+        "keyword_id": 38
+      },
+      {
+        "keyword": "optometrist",
+        "keyword_id": 35
+      },
+      {
+        "keyword": "eye exam",
+        "keyword_id": 36
+      },
+      {
+        "keyword": "eye doctor",
+        "keyword_id": 34
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": ""
+    }
+  },
+  {
+    "client_name": "Mark Tegenkamp",
+    "client_id": 4,
+    "biz_name": "50 Dollar Eye Guy",
+    "biz_id": 7,
+    "biz_url": "https://maps.app.goo.gl/EFqnppmsPrAoXHv48",
+    "city": "Pensacola",
+    "state": "FL",
+    "biz_address": "5328 N Davis Hwy",
+    "keywords": [
+      {
+        "keyword": "walk in eye exam",
+        "keyword_id": 43
+      },
+      {
+        "keyword": "eye exam",
+        "keyword_id": 41
+      },
+      {
+        "keyword": "contact lenses",
+        "keyword_id": 42
+      },
+      {
+        "keyword": "eye doctor",
+        "keyword_id": 39
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": ""
+    }
+  },
+  {
+    "client_name": "Brittany Lapuerta",
+    "client_id": 5,
+    "biz_name": "Leo Lapuerta, MD Plastic Surgery",
+    "biz_id": 8,
+    "biz_url": "https://maps.app.goo.gl/QX9P8tgdP6iijgFy6",
+    "city": "Houston",
+    "state": "TX",
+    "biz_address": "1919 La Branch St",
+    "keywords": [
+      {
+        "keyword": "botox",
+        "keyword_id": 53
+      },
+      {
+        "keyword": "brazilian butt lift",
+        "keyword_id": 48
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": ""
+    }
+  },
+  {
+    "client_name": "Brittany Lapuerta",
+    "client_id": 5,
+    "biz_name": "Leo Lapuerta, MD Plastic Surgery",
+    "biz_id": 9,
+    "biz_url": "https://maps.app.goo.gl/4CEg2w2z2MPzzMvz5",
+    "city": "Pearland",
+    "state": "TX",
+    "biz_address": "2360 County Rd 94 #104",
+    "keywords": [
+      {
+        "keyword": "botox",
+        "keyword_id": 55
+      },
+      {
+        "keyword": "mommy makeover",
+        "keyword_id": 58
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": ""
+    }
+  },
+  {
+    "client_name": "Brittany Lapuerta",
+    "client_id": 5,
+    "biz_name": "Leo Lapuerta, MD Plastic Surgery",
+    "biz_id": 10,
+    "biz_url": "https://maps.app.goo.gl/9jffns5jzE9eCAyM9",
+    "city": "Katy",
+    "state": "TX",
+    "biz_address": "21312 Provincial Blvd B",
+    "keywords": [
+      {
+        "keyword": "mommy makeover",
+        "keyword_id": 61
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "21312"
+    }
+  },
+  {
+    "client_name": "Judith Smith",
+    "client_id": 37,
+    "biz_name": "Atlanta Basement Design, Johns Creek",
+    "biz_id": 42,
+    "biz_url": "https://share.google/0VSv54uD9OJNbHg7o",
+    "city": "Roswell",
+    "state": "GA",
+    "biz_address": "1425 Old Ellis Road, Roswell, GA 30076-3822, USA",
+    "keywords": [
+      {
+        "keyword": "basement finishing atlanta",
+        "keyword_id": 210
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "30076"
+    }
+  },
+  {
+    "client_name": "Jonathan Olivera",
+    "client_id": 38,
+    "biz_name": "Mighty Dog Roofing of Rhode Island, North Providence",
+    "biz_id": 44,
+    "biz_url": "https://share.google/aBxchWIqTi72rdtax",
+    "city": "North Providence",
+    "state": "RI",
+    "biz_address": "27 Elizabeth Drive, North Providence, RI 02904-3713, USA",
+    "keywords": [
+      {
+        "keyword": "roofing companies",
+        "keyword_id": 217
+      },
+      {
+        "keyword": "roofer",
+        "keyword_id": 220
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "02904"
+    }
+  },
+  {
+    "client_name": "Victor Romero",
+    "client_id": 39,
+    "biz_name": "California Car Pros - Window Tint, Car Wraps, PPF Palmdale",
+    "biz_id": 45,
+    "biz_url": "https://g.co/kgs/ucPqYvZ",
+    "city": "Palmdale",
+    "state": "CA",
+    "biz_address": "40437 10th Street West Unit B, Palmdale, CA 93551-2003, USA",
+    "keywords": [
+      {
+        "keyword": "Premium Window Tint",
+        "keyword_id": 222
+      },
+      {
+        "keyword": "Ceramic Coating Shop",
+        "keyword_id": 223
+      },
+      {
+        "keyword": "window tint",
+        "keyword_id": 224
+      },
+      {
+        "keyword": "ceramic window tint",
+        "keyword_id": 225
+      },
+      {
+        "keyword": "Paint Protection Film",
+        "keyword_id": 226
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "40437"
+    }
+  },
+  {
+    "client_name": "Freddy Girgis",
+    "client_id": 40,
+    "biz_name": "Diamond Auto Salon, Orange County | PPF, Tinting & Car Wraps, Costa Mesa",
+    "biz_id": 46,
+    "biz_url": "https://g.co/kgs/S9PT5Px",
+    "city": "Costa Mesa",
+    "state": "CA",
+    "biz_address": "3197 Red Hill Avenue Suite A, Costa Mesa, CA 92626-3450, USA",
+    "keywords": [
+      {
+        "keyword": "ceramic coating",
+        "keyword_id": 227
+      },
+      {
+        "keyword": "car ceramic coating",
+        "keyword_id": 229
+      },
+      {
+        "keyword": "xpel paint protection film",
+        "keyword_id": 231
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "92626"
+    }
+  },
+  {
+    "client_name": "David Calderon",
+    "client_id": 41,
+    "biz_name": "Calderon's Tires, 454 San Jose",
+    "biz_id": 47,
+    "biz_url": "https://g.co/kgs/u1aiPZW",
+    "city": "San Jose",
+    "state": "CA",
+    "biz_address": "454 South Bascom Avenue, San Jose, CA 95128-2209, USA",
+    "keywords": [
+      {
+        "keyword": "brakes near me",
+        "keyword_id": 233
+      },
+      {
+        "keyword": "wheel alignment",
+        "keyword_id": 234
+      },
+      {
+        "keyword": "Tire shop",
+        "keyword_id": 235
+      },
+      {
+        "keyword": "Tires",
+        "keyword_id": 236
+      },
+      {
+        "keyword": "brakes",
+        "keyword_id": 232
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "95128"
+    }
+  },
+  {
+    "client_name": "simplejoysoffice@gmail.com",
+    "client_id": 42,
+    "biz_name": "Simple Joys, Seattle",
+    "biz_id": 48,
+    "biz_url": "https://share.google/4Ujp7Y88KNCZG1YJW",
+    "city": "Seattle",
+    "state": "WA",
+    "biz_address": "7838 Lake City Way Northeast, Seattle, WA 98115-4358, USA",
+    "keywords": [
+      {
+        "keyword": "gutter cleaning",
+        "keyword_id": 241
+      },
+      {
+        "keyword": "house cleaning service",
+        "keyword_id": 238
+      },
+      {
+        "keyword": "window cleaning services",
+        "keyword_id": 239
+      },
+      {
+        "keyword": "roof cleaning",
+        "keyword_id": 240
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "98115"
+    }
+  },
+  {
+    "client_name": "John Mueller",
+    "client_id": 43,
+    "biz_name": "Vault Studio, Santa Barbara",
+    "biz_id": 49,
+    "biz_url": "https://share.google/ckPY8kaOLOeELijlw",
+    "city": "Santa Barbara",
+    "state": "CA",
+    "biz_address": "590 e Gutierrez, Santa Barbara CA 93103",
+    "keywords": [
+      {
+        "keyword": "kitchen remodeling",
+        "keyword_id": 245
+      },
+      {
+        "keyword": "kitchen and bath remodeling",
+        "keyword_id": 242
+      },
+      {
+        "keyword": "kitchen remodel",
+        "keyword_id": 246
+      },
+      {
+        "keyword": "bathroom remodeling",
+        "keyword_id": 243
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "93103"
+    }
+  },
+  {
+    "client_name": "David Calderon",
+    "client_id": 44,
+    "biz_name": "GYMGUYZ Silicon Valley, Fremont",
+    "biz_id": 50,
+    "biz_url": "https://share.google/wGhmKeOgxqx7clVrX",
+    "city": "Fremont",
+    "state": "CA",
+    "biz_address": "661 Monticello Terrace, Fremont, CA 94539-5400, USA",
+    "keywords": [
+      {
+        "keyword": "Personal training",
+        "keyword_id": 247
+      },
+      {
+        "keyword": "Personal trainer",
+        "keyword_id": 248
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "94539"
+    }
+  },
+  {
+    "client_name": "Mike Gross",
+    "client_id": 45,
+    "biz_name": "Outplay Marketing",
+    "biz_id": 51,
+    "biz_url": "https://share.google/cTBtnbo2e8qnVbawT",
+    "city": "Tampa",
+    "state": "FL",
+    "biz_address": "14999 North Florida Avenue, Tampa, FL 33613-1612, USA",
+    "keywords": [
+      {
+        "keyword": "website company",
+        "keyword_id": 252
+      },
+      {
+        "keyword": "digital marketing agency",
+        "keyword_id": 253
+      },
+      {
+        "keyword": "online marketing company",
+        "keyword_id": 256
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "14999"
+    }
+  },
+  {
+    "client_name": "Tonya Wright",
+    "client_id": 47,
+    "biz_name": "Airbear Heating and Cooling DFW",
+    "biz_id": 53,
+    "biz_url": "https://share.google/0RZirPoQqAO2lgNdj",
+    "city": "Arlington",
+    "state": "TX",
+    "biz_address": "4310 Rambling Creek Court, Arlington, TX 76016-3404, USA",
+    "keywords": [
+      {
+        "keyword": "emergency ac repair",
+        "keyword_id": 263
+      },
+      {
+        "keyword": "cheap ac repair",
+        "keyword_id": 264
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "76016"
+    }
+  },
+  {
+    "client_name": "Eric Richards",
+    "client_id": 48,
+    "biz_name": "Cache Chiro",
+    "biz_id": 54,
+    "biz_url": "https://share.google/EKBdnV6XaVCxihQHG",
+    "city": "Logan",
+    "state": "UT",
+    "biz_address": "1415 North 400 East, Logan, UT 84341-7539, USA",
+    "keywords": [
+      {
+        "keyword": "Chiropractic Care",
+        "keyword_id": 269
+      },
+      {
+        "keyword": "Car Accident Chiropractor",
+        "keyword_id": 270
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "84341"
+    }
+  },
+  {
+    "client_name": "Ron French",
+    "client_id": 49,
+    "biz_name": "French Investments - Buys Houses In Florida, Pensacola",
+    "biz_id": 55,
+    "biz_url": "https://share.google/2lPca3UUjJv7DDhRj",
+    "city": "Pensacola",
+    "state": "FL",
+    "biz_address": "38 South Blue Angel Parkway, Pensacola, FL 32506-6045, USA",
+    "keywords": [
+      {
+        "keyword": "get a cash offer for my house",
+        "keyword_id": 272
+      },
+      {
+        "keyword": "i want to sell my house for cash",
+        "keyword_id": 274
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "32506"
+    }
+  },
+  {
+    "client_name": "Brad Van Laningham",
+    "client_id": 50,
+    "biz_name": "Bradley Law Group, Fayetteville",
+    "biz_id": 56,
+    "biz_url": "https://g.co/kgs/5Bn51KB",
+    "city": "Fayetteville",
+    "state": "NC",
+    "biz_address": "2501 Bragg Boulevard, Fayetteville, NC 28303-4141, USA",
+    "keywords": [
+      {
+        "keyword": "motorcycle accident lawyer",
+        "keyword_id": 277
+      },
+      {
+        "keyword": "personal accident lawyers",
+        "keyword_id": 279
+      },
+      {
+        "keyword": "tractor trailer accident lawyer",
+        "keyword_id": 280
+      },
+      {
+        "keyword": "personal injury law firms",
+        "keyword_id": 281
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "28303"
+    }
+  },
+  {
+    "client_name": "Avner Tamari",
+    "client_id": 51,
+    "biz_name": "TNT DESIGN & BUILD, Rancho Santa Fe",
+    "biz_id": 57,
+    "biz_url": "https://share.google/6gUXCTHAJVwWHRE6Z",
+    "city": "Rancho Santa Fe",
+    "state": "CA",
+    "biz_address": "16950 Via De Santa Fe suit 115, Rancho Santa Fe, CA 92091, USA",
+    "keywords": [
+      {
+        "keyword": "accessory dwelling units",
+        "keyword_id": 282
+      },
+      {
+        "keyword": "general contractor",
+        "keyword_id": 283
+      },
+      {
+        "keyword": "kitchen remodel",
+        "keyword_id": 284
+      },
+      {
+        "keyword": "remodeling companies",
+        "keyword_id": 285
+      },
+      {
+        "keyword": "kitchen renovation",
+        "keyword_id": 286
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "16950"
+    }
+  },
+  {
+    "client_name": "Curtis Ross",
+    "client_id": 11,
+    "biz_name": "Greens Long Island Brooklyn Weed Cannabis Delivery LLC, Brooklyn",
+    "biz_id": 59,
+    "biz_url": "https://share.google/G0ekHFB58s8fO6gE2",
+    "city": "Brooklyn",
+    "state": "NY",
+    "biz_address": "195 Bedford Avenue, Brooklyn, NY 11211-2949, USA",
+    "keywords": [
+      {
+        "keyword": "Weed Delivery",
+        "keyword_id": 290
+      },
+      {
+        "keyword": "Same Day Weed Delivery",
+        "keyword_id": 291
+      },
+      {
+        "keyword": "Legal Weed Delivery",
+        "keyword_id": 292
+      },
+      {
+        "keyword": "Weed Delivery Long Island",
+        "keyword_id": 294
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "11211"
+    }
+  },
+  {
+    "client_name": "Justin Raanan",
+    "client_id": 53,
+    "biz_name": "Rifkin Raanan Beverly Hills Cosmetic Dentistry, Beverly Hills",
+    "biz_id": 60,
+    "biz_url": "https://share.google/qINgnDdWlK0MrIHku",
+    "city": "Beverly Hills",
+    "state": "CA",
+    "biz_address": "414 North Camden Drive #1280, Beverly Hills, CA 90210-4512, USA",
+    "keywords": [
+      {
+        "keyword": "dental implants",
+        "keyword_id": 296
+      },
+      {
+        "keyword": "Cosmetic dentist",
+        "keyword_id": 298
+      },
+      {
+        "keyword": "Veneers dentist",
+        "keyword_id": 299
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "90210"
+    }
+  },
+  {
+    "client_name": "Michael Martin",
+    "client_id": 54,
+    "biz_name": "Bupp Contracting & Remodeling LLC, Frederick",
+    "biz_id": 61,
+    "biz_url": "https://share.google/ox0pxL2rlaCuC9STL",
+    "city": "Frederick",
+    "state": "MD",
+    "biz_address": "801 Toll House Avenue, Frederick, MD 21701-4564, USA",
+    "keywords": [
+      {
+        "keyword": "Roof Leak Repair",
+        "keyword_id": 301
+      },
+      {
+        "keyword": "Flat Roof Repair",
+        "keyword_id": 302
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "21701"
+    }
+  },
+  {
+    "client_name": "Zoe-El Henriquez",
+    "client_id": 55,
+    "biz_name": "Air Bourne Air A/C & Heat Inc., Houston",
+    "biz_id": 62,
+    "biz_url": "https://share.google/2WTYiOiowOHHDjUl6",
+    "city": "Houston",
+    "state": "TX",
+    "biz_address": "5779 San Felipe St, Houston, TX 77057",
+    "keywords": [
+      {
+        "keyword": "ac experts",
+        "keyword_id": 308
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "77057"
+    }
+  },
+  {
+    "client_name": "Sarah Chancey",
+    "client_id": 56,
+    "biz_name": "Sarah Chancey | ERA Fernandina Beach Realty",
+    "biz_id": 63,
+    "biz_url": "https://share.google/gKam2sxfEKJBgMdOx",
+    "city": "Fernandina Beach",
+    "state": "FL",
+    "biz_address": "96068 Piney Island Dr, Fernandina Beach, FL 32034",
+    "keywords": [
+      {
+        "keyword": "real estate agents",
+        "keyword_id": 311
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "96068"
+    }
+  },
+  {
+    "client_name": "Alan Worcester",
+    "client_id": 57,
+    "biz_name": "WORCESTER'S Inc Power Equipment, Trailers & Pet Feeds",
+    "biz_id": 64,
+    "biz_url": "https://share.google/bttXnEy0Dtv4d47rG",
+    "city": "North Ridgeville",
+    "state": "OH",
+    "biz_address": "34200 Lorain Rd, North Ridgeville, OH 44039, USA",
+    "keywords": [
+      {
+        "keyword": "zero turn mower",
+        "keyword_id": 319
+      },
+      {
+        "keyword": "utility enclosed trailer sales",
+        "keyword_id": 315
+      },
+      {
+        "keyword": "Lawn mower sales",
+        "keyword_id": 318
+      },
+      {
+        "keyword": "feed store",
+        "keyword_id": 317
+      },
+      {
+        "keyword": "trailer dealer sales",
+        "keyword_id": 316
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "34200"
+    }
+  },
+  {
+    "client_name": "Ray Tort",
+    "client_id": 58,
+    "biz_name": "GEM Remodeling",
+    "biz_id": 65,
+    "biz_url": "https://share.google/JCO6QTrVfmiEhoFyY",
+    "city": "Penfield",
+    "state": "NY",
+    "biz_address": "9 Shadow Pines Drive, Penfield, NY 14526-1059, USA",
+    "keywords": [
+      {
+        "keyword": "In-law suite addition",
+        "keyword_id": 321
+      },
+      {
+        "keyword": "General contractor",
+        "keyword_id": 320
+      },
+      {
+        "keyword": "Kitchen remodeler",
+        "keyword_id": 323
+      },
+      {
+        "keyword": "Basement finishing",
+        "keyword_id": 324
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "14526"
+    }
+  },
+  {
+    "client_name": "Jim Bone",
+    "client_id": 59,
+    "biz_name": "HangTime Rentals",
+    "biz_id": 66,
+    "biz_url": "https://share.google/QkEqb23evPpdmcLO2",
+    "city": "Layton",
+    "state": "UT",
+    "biz_address": "62 South 3200 West, Layton, UT 84041-8748, USA",
+    "keywords": [
+      {
+        "keyword": "Waterslide Rentals",
+        "keyword_id": 325
+      },
+      {
+        "keyword": "Party Equipment Rentals",
+        "keyword_id": 326
+      },
+      {
+        "keyword": "Party Rentals",
+        "keyword_id": 327
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "84041"
+    }
+  },
+  {
+    "client_name": "Daniel Palmer",
+    "client_id": 60,
+    "biz_name": "CV Law Fresno Family Lawyers",
+    "biz_id": 67,
+    "biz_url": "https://share.google/QhQq1r7z2L0lH9zIc",
+    "city": "Fresno",
+    "state": "CA",
+    "biz_address": "7108 North Fresno Street, Fresno, CA 93720-2938, USA",
+    "keywords": [
+      {
+        "keyword": "Divorce attorney",
+        "keyword_id": 330
+      },
+      {
+        "keyword": "Divorce lawyer",
+        "keyword_id": 331
+      },
+      {
+        "keyword": "Family law attorney",
+        "keyword_id": 333
+      },
+      {
+        "keyword": "Child support lawyer",
+        "keyword_id": 334
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "93720"
+    }
+  },
+  {
+    "client_name": "Katherine Nguyen",
+    "client_id": 61,
+    "biz_name": "BizWell Benefits, LLC | Katherine Nguyen",
+    "biz_id": 68,
+    "biz_url": "https://share.google/ZE7bFhzDmgTpDzEbz",
+    "city": "Houston",
+    "state": "TX",
+    "biz_address": "13100 Wortham Center Drive Suite 300, Houston, TX 77065-5631, USA",
+    "keywords": [
+      {
+        "keyword": "health insurance for individuals and families",
+        "keyword_id": 336
+      },
+      {
+        "keyword": "small business health insurance",
+        "keyword_id": 337
+      },
+      {
+        "keyword": "self employed health insurance",
+        "keyword_id": 335
+      },
+      {
+        "keyword": "PPO health insurance",
+        "keyword_id": 339
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "13100"
+    }
+  },
+  {
+    "client_name": "Jake Dylan",
+    "client_id": 62,
+    "biz_name": "Mack Engineering, Dunwoody",
+    "biz_id": 69,
+    "biz_url": "https://share.google/4G9fl5B3ekaXwNm4S",
+    "city": "Dunwoody",
+    "state": "GA",
+    "biz_address": "5343 Roberts Drive, Dunwoody, GA 30338-3834, USA",
+    "keywords": [
+      {
+        "keyword": "Construction Management",
+        "keyword_id": 342
+      },
+      {
+        "keyword": "land disturbance permit",
+        "keyword_id": 340
+      },
+      {
+        "keyword": "Civil Engineering",
+        "keyword_id": 344
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "30338"
+    }
+  },
+  {
+    "client_name": "Charles Huurman",
+    "client_id": 63,
+    "biz_name": "Charles Huurman Tattoo - Best Tattoo Artist Austin TX | Tattoo Shop In Austin | Tattoo Places in Austin",
+    "biz_id": 70,
+    "biz_url": "https://share.google/pxfhb44fMnm4ceFra",
+    "city": "Austin",
+    "state": "TX",
+    "biz_address": "1305 E 6th St 7 Sutie 7, Austin, TX 78702, USA",
+    "keywords": [
+      {
+        "keyword": "Tattoo Shop",
+        "keyword_id": 347
+      },
+      {
+        "keyword": "Realism Tattoo",
+        "keyword_id": 348
+      },
+      {
+        "keyword": "Tattoo Studio",
+        "keyword_id": 346
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "78702"
+    }
+  },
+  {
+    "client_name": "Sahil Nayar",
+    "client_id": 64,
+    "biz_name": "Flavor fusion",
+    "biz_id": 71,
+    "biz_url": "https://share.google/fBYEEFN8AIZLQwylA",
+    "city": "Floral Park",
+    "state": "NY",
+    "biz_address": "248-54 Jericho Turnpike, Floral Park, NY 11001-4002, USA",
+    "keywords": [
+      {
+        "keyword": "Indian food delivery",
+        "keyword_id": 350
+      },
+      {
+        "keyword": "chicken biryani",
+        "keyword_id": 351
+      },
+      {
+        "keyword": "Indian takeout",
+        "keyword_id": 352
+      },
+      {
+        "keyword": "indian restaurant",
+        "keyword_id": 353
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "11001"
+    }
+  },
+  {
+    "client_name": "Rebecca Patterson",
+    "client_id": 65,
+    "biz_name": "Nurture Nest Play Therapy and Counseling",
+    "biz_id": 72,
+    "biz_url": "https://share.google/xROG3rtaIfis1Yokm",
+    "city": "Danville",
+    "state": "KY",
+    "biz_address": "401 Adams Street Danville, KY 40422",
+    "keywords": [
+      {
+        "keyword": "Family counseling service",
+        "keyword_id": 356
+      },
+      {
+        "keyword": "Couples therapy",
+        "keyword_id": 357
+      },
+      {
+        "keyword": "Therapist for depression",
+        "keyword_id": 358
+      },
+      {
+        "keyword": "Therapist",
+        "keyword_id": 359
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "40422"
+    }
+  },
+  {
+    "client_name": "Daniel Simmons",
+    "client_id": 66,
+    "biz_name": "Pressure Washing America, LLC",
+    "biz_id": 73,
+    "biz_url": "https://share.google/Zb4YiDe80E0jTeo6v",
+    "city": "Houston",
+    "state": "TX",
+    "biz_address": "19506 Cardiff Park Lane, Houston, TX 77094-3024, USA",
+    "keywords": [
+      {
+        "keyword": "window cleaning",
+        "keyword_id": 360
+      },
+      {
+        "keyword": "Roof cleaning services",
+        "keyword_id": 361
+      },
+      {
+        "keyword": "house soft washing",
+        "keyword_id": 362
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "19506"
+    }
+  },
+  {
+    "client_name": "Jeremy Lisby",
+    "client_id": 67,
+    "biz_name": "Auction Direct RV",
+    "biz_id": 74,
+    "biz_url": "https://share.google/z32QFWjJ0HxDPBqdv",
+    "city": "Ocala",
+    "state": "FL",
+    "biz_address": "4790 North US Highway 441, Ocala, FL 34475-1595, USA",
+    "keywords": [
+      {
+        "keyword": "used camper dealers",
+        "keyword_id": 368
+      },
+      {
+        "keyword": "used rv for sale",
+        "keyword_id": 367
+      },
+      {
+        "keyword": "sale my camper",
+        "keyword_id": 369
+      },
+      {
+        "keyword": "campers for sale",
+        "keyword_id": 365
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "34475"
+    }
+  },
+  {
+    "client_name": "Brian Culley",
+    "client_id": 68,
+    "biz_name": "NJ Mold Pros",
+    "biz_id": 75,
+    "biz_url": "https://share.google/pMszaAq7z2AdfXD3P",
+    "city": "Manasquan",
+    "state": "NJ",
+    "biz_address": "221 New Jersey 71, Manasquan, NJ 08736, USA",
+    "keywords": [
+      {
+        "keyword": "Exterior drainage",
+        "keyword_id": 371
+      },
+      {
+        "keyword": "Leaking foundation",
+        "keyword_id": 370
+      },
+      {
+        "keyword": "French drain",
+        "keyword_id": 372
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "08736"
+    }
+  },
+  {
+    "client_name": "Kelle Ballard",
+    "client_id": 71,
+    "biz_name": "Decisive Architectural Design Solutions (HireDADS)",
+    "biz_id": 78,
+    "biz_url": "https://share.google/bkWLIco5FhC2Yrtqn",
+    "city": "Westminster",
+    "state": "CO",
+    "biz_address": "6985 West 94th Avenue, Westminster, CO 80021-4816, USA",
+    "keywords": [
+      {
+        "keyword": "Basement Remodel",
+        "keyword_id": 386
+      },
+      {
+        "keyword": "Bathroom Remodel",
+        "keyword_id": 385
+      },
+      {
+        "keyword": "Home Additions",
+        "keyword_id": 388
+      },
+      {
+        "keyword": "Kitchen Remodel",
+        "keyword_id": 389
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "80021"
+    }
+  },
+  {
+    "client_name": "Curtis Johnson",
+    "client_id": 72,
+    "biz_name": "The Wellness Retreat",
+    "biz_id": 79,
+    "biz_url": "https://share.google/7ye3r9xnALnblDaIS",
+    "city": "Humble",
+    "state": "TX",
+    "biz_address": "8810 Will Clayton Pkwy suite F, Humble, TX 77338",
+    "keywords": [
+      {
+        "keyword": "Couples Therapy",
+        "keyword_id": 390
+      },
+      {
+        "keyword": "Counseling",
+        "keyword_id": 391
+      },
+      {
+        "keyword": "Therapist",
+        "keyword_id": 392
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "77338"
+    }
+  },
+  {
+    "client_name": "Gabe Ruiz",
+    "client_id": 73,
+    "biz_name": "Royalty Plumbing Inc",
+    "biz_id": 80,
+    "biz_url": "https://share.google/URCFgpKol9jeFmhWx",
+    "city": "Riverside",
+    "state": "CA",
+    "biz_address": "3323 Madison St, Riverside, CA 92504",
+    "keywords": [
+      {
+        "keyword": "clogged drain repair",
+        "keyword_id": 394
+      },
+      {
+        "keyword": "repipe plumbing",
+        "keyword_id": 395
+      },
+      {
+        "keyword": "plumbing services",
+        "keyword_id": 396
+      },
+      {
+        "keyword": "water heater installation",
+        "keyword_id": 397
+      },
+      {
+        "keyword": "slab leak repair",
+        "keyword_id": 398
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "92504"
+    }
+  },
+  {
+    "client_name": "Brad Harwell",
+    "client_id": 74,
+    "biz_name": "AI Advanced Inspections",
+    "biz_id": 81,
+    "biz_url": "https://share.google/yb1ksgHS9MKOZkRMW",
+    "city": "Chattanooga",
+    "state": "TN",
+    "biz_address": "808 Chestnut Street, Chattanooga, TN 37402-2510, USA",
+    "keywords": [
+      {
+        "keyword": "Home Inspectors",
+        "keyword_id": 399
+      },
+      {
+        "keyword": "Best Home Inspector",
+        "keyword_id": 401
+      },
+      {
+        "keyword": "Best Building Inspectors",
+        "keyword_id": 403
+      },
+      {
+        "keyword": "Home Inspections",
+        "keyword_id": 402
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "37402"
+    }
+  },
+  {
+    "client_name": "Afik Shabat",
+    "client_id": 75,
+    "biz_name": "Karma Garage Door Services, LLC",
+    "biz_id": 82,
+    "biz_url": "https://share.google/OjIj7FgBq4ScF8kYf",
+    "city": "Delray Beach",
+    "state": "FL",
+    "biz_address": "2091 West Atlantic Avenue, Delray Beach, FL 33445-4779, USA",
+    "keywords": [
+      {
+        "keyword": "garage door fix",
+        "keyword_id": 404
+      },
+      {
+        "keyword": "garage door repair service",
+        "keyword_id": 405
+      },
+      {
+        "keyword": "garage door opener repair",
+        "keyword_id": 406
+      },
+      {
+        "keyword": "garage door repair",
+        "keyword_id": 407
+      },
+      {
+        "keyword": "garage door repair near me",
+        "keyword_id": 408
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "33445"
+    }
+  },
+  {
+    "client_name": "Seth Matton",
+    "client_id": 80,
+    "biz_name": "East Lyme Oral and Maxillofacial Surgery",
+    "biz_id": 88,
+    "biz_url": "https://share.google/EOmuinXC1DPGU8Roa",
+    "city": "East Lyme",
+    "state": "CT",
+    "biz_address": "314 Flanders Road UNIT 1B, East Lyme, CT 06333-1765, USA",
+    "keywords": [
+      {
+        "keyword": "Dental implants",
+        "keyword_id": 435
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "06333"
+    }
+  },
+  {
+    "client_name": "Ken Loder",
+    "client_id": 88,
+    "biz_name": "Ace Grease Service - St. Louis, Millstadt",
+    "biz_id": 97,
+    "biz_url": "https://share.google/c2SedpIWYD7DkooOh",
+    "city": "Millstadt",
+    "state": "IL",
+    "biz_address": "9035 Illinois 163, Millstadt, IL 62260-3239, USA",
+    "keywords": [
+      {
+        "keyword": "used cooking oil containers",
+        "keyword_id": 479
+      },
+      {
+        "keyword": "used cooking oil collection",
+        "keyword_id": 480
+      },
+      {
+        "keyword": "cooking oil pickup service",
+        "keyword_id": 481
+      },
+      {
+        "keyword": "grease collection service",
+        "keyword_id": 483
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "62260"
+    }
+  },
+  {
+    "client_name": "Ken Loder",
+    "client_id": 88,
+    "biz_name": "Ace Grease Service - Indianapolis, Indianapolis",
+    "biz_id": 103,
+    "biz_url": "https://share.google/XU94pybxeRCju8K3v",
+    "city": "Indianapolis",
+    "state": "IN",
+    "biz_address": "1815 Kentucky Avenue, Indianapolis, IN 46221-1911, USA",
+    "keywords": [
+      {
+        "keyword": "used cooking oil containers",
+        "keyword_id": 507
+      },
+      {
+        "keyword": "used cooking oil collection",
+        "keyword_id": 508
+      },
+      {
+        "keyword": "grease line maintenance",
+        "keyword_id": 509
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "46221"
+    }
+  },
+  {
+    "client_name": "Ken Loder",
+    "client_id": 88,
+    "biz_name": "Ace Grease Service, Olive Branch",
+    "biz_id": 104,
+    "biz_url": "https://share.google/i72HUtYfBBXjm5XtL",
+    "city": "Olive Branch",
+    "state": "MS",
+    "biz_address": "Transfer Station, 7240 Craft-Goodman Road, Olive Branch, MS 38654-1028, USA",
+    "keywords": [
+      {
+        "keyword": "grease line maintenance",
+        "keyword_id": 512
+      },
+      {
+        "keyword": "grease collection service",
+        "keyword_id": 513
+      },
+      {
+        "keyword": "used cooking oil collection",
+        "keyword_id": 514
+      },
+      {
+        "keyword": "used cooking oil containers",
+        "keyword_id": 515
+      },
+      {
+        "keyword": "cooking oil pickup service",
+        "keyword_id": 516
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "38654"
+    }
+  },
+  {
+    "client_name": "Rick Romaro",
+    "client_id": 94,
+    "biz_name": "Veterans Vision Exterior Washing & Handyman, Ringgold",
+    "biz_id": 105,
+    "biz_url": "https://maps.app.goo.gl/9ekm9aGAzA1JQpDx5",
+    "city": "Ringgold",
+    "state": "GA",
+    "biz_address": "92 Smokewood Lane, Ringgold, GA 30736-3306, USA",
+    "keywords": [
+      {
+        "keyword": "residential pressure washing",
+        "keyword_id": 517
+      },
+      {
+        "keyword": "pressure washing",
+        "keyword_id": 518
+      },
+      {
+        "keyword": "pressure washing company",
+        "keyword_id": 519
+      },
+      {
+        "keyword": "house washing",
+        "keyword_id": 520
+      },
+      {
+        "keyword": "commercial pressure washing",
+        "keyword_id": 521
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "30736"
+    }
+  },
+  {
+    "client_name": "Tyler Junell",
+    "client_id": 95,
+    "biz_name": "Mr. Restore, Lewisville",
+    "biz_id": 106,
+    "biz_url": "https://share.google/gGbRN0nOWhgZ6z90N",
+    "city": "Lewisville",
+    "state": "TX",
+    "biz_address": "1590 Texas 121 Business, Lewisville, TX 75056-4808, USA",
+    "keywords": [
+      {
+        "keyword": "water restoration damage",
+        "keyword_id": 522
+      },
+      {
+        "keyword": "water restoration company",
+        "keyword_id": 523
+      },
+      {
+        "keyword": "fire damage restoration",
+        "keyword_id": 524
+      },
+      {
+        "keyword": "water restoration contractors",
+        "keyword_id": 525
+      },
+      {
+        "keyword": "storm damage restoration",
+        "keyword_id": 526
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "75056"
+    }
+  },
+  {
+    "client_name": "Tyler Junell",
+    "client_id": 95,
+    "biz_name": "Mr Restore, McKinney",
+    "biz_id": 107,
+    "biz_url": "https://share.google/Kf7XgdMXdSvMI8JXR",
+    "city": "McKinney",
+    "state": "TX",
+    "biz_address": "3804 Gregory Dr, McKinney, TX 75071, USA",
+    "keywords": [
+      {
+        "keyword": "water restoration company",
+        "keyword_id": 527
+      },
+      {
+        "keyword": "water damage restoration",
+        "keyword_id": 528
+      },
+      {
+        "keyword": "fire damage restoration",
+        "keyword_id": 529
+      },
+      {
+        "keyword": "water restoration contractors",
+        "keyword_id": 530
+      },
+      {
+        "keyword": "storm damage restoration",
+        "keyword_id": 531
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "75071"
+    }
+  },
+  {
+    "client_name": "Jubran Twal",
+    "client_id": 96,
+    "biz_name": "Expo Heating & Cooling Inc., Spring",
+    "biz_id": 108,
+    "biz_url": "https://share.google/ui6syoad6Rp6aYZ5F",
+    "city": "Spring",
+    "state": "TX",
+    "biz_address": "19507 Wied Rd Suite B, Spring, TX 77388, USA",
+    "keywords": [
+      {
+        "keyword": "Emergency ac repair",
+        "keyword_id": 532
+      },
+      {
+        "keyword": "ac repair",
+        "keyword_id": 533
+      },
+      {
+        "keyword": "heating repair",
+        "keyword_id": 534
+      },
+      {
+        "keyword": "HVAC replacement",
+        "keyword_id": 535
+      },
+      {
+        "keyword": "ac repair near me",
+        "keyword_id": 536
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "19507"
+    }
+  },
+  {
+    "client_name": "Avner Tamari",
+    "client_id": 97,
+    "biz_name": "TNT Design & Build, Carlsbad",
+    "biz_id": 109,
+    "biz_url": "https://share.google/eOHi0VH7XA0Qz3za9",
+    "city": "Carlsbad",
+    "state": "CA",
+    "biz_address": "3142 Tiger Run Court # 108, Carlsbad, CA 92010-6693, USA",
+    "keywords": [
+      {
+        "keyword": "accessory dwelling units",
+        "keyword_id": 537
+      },
+      {
+        "keyword": "general contractor",
+        "keyword_id": 538
+      },
+      {
+        "keyword": "kitchen design",
+        "keyword_id": 539
+      },
+      {
+        "keyword": "kitchen remodel",
+        "keyword_id": 540
+      },
+      {
+        "keyword": "remodeling companies",
+        "keyword_id": 541
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "92010"
+    }
+  },
+  {
+    "client_name": "Ngu Mbandi",
+    "client_id": 98,
+    "biz_name": "Calm Dental, Washington",
+    "biz_id": 110,
+    "biz_url": "https://share.google/kqRRWa2ght9TM75Ih",
+    "city": "Washington",
+    "state": "DC",
+    "biz_address": "618 T Street Northwest STE B, Washington, DC 20001-5117, USA",
+    "keywords": [
+      {
+        "keyword": "Dental implants",
+        "keyword_id": 542
+      },
+      {
+        "keyword": "Painless dentistry",
+        "keyword_id": 543
+      },
+      {
+        "keyword": "Teeth whitening",
+        "keyword_id": 544
+      },
+      {
+        "keyword": "Dental veneers",
+        "keyword_id": 545
+      },
+      {
+        "keyword": "Dentist",
+        "keyword_id": 546
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "20001"
+    }
+  },
+  {
+    "client_name": "Brittney Folds",
+    "client_id": 99,
+    "biz_name": "Top Choice Roofing, Gardendale",
+    "biz_id": 111,
+    "biz_url": "https://share.google/UH9u4Q0O8iFMtAn8b",
+    "city": "Gardendale",
+    "state": "AL",
+    "biz_address": "1420 Northbrook Dr suite 108, Gardendale, AL 35071",
+    "keywords": [
+      {
+        "keyword": "best roofing company",
+        "keyword_id": 547
+      },
+      {
+        "keyword": "residential roof replacement",
+        "keyword_id": 548
+      },
+      {
+        "keyword": "residential roofing",
+        "keyword_id": 549
+      },
+      {
+        "keyword": "roof replacement",
+        "keyword_id": 550
+      },
+      {
+        "keyword": "metal roofing",
+        "keyword_id": 551
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "35071"
+    }
+  },
+  {
+    "client_name": "Brittney Folds",
+    "client_id": 99,
+    "biz_name": "Top Choice Roofing, LLC, Cullman",
+    "biz_id": 112,
+    "biz_url": "https://share.google/05qaRHF7olyVQDdMb",
+    "city": "Cullman",
+    "state": "AL",
+    "biz_address": "417 3rd Avenue Southwest Suite 135, Cullman, AL 35055-4104, USA",
+    "keywords": [
+      {
+        "keyword": "metal roofing",
+        "keyword_id": 552
+      },
+      {
+        "keyword": "commercial roofing",
+        "keyword_id": 553
+      },
+      {
+        "keyword": "roof installation",
+        "keyword_id": 554
+      },
+      {
+        "keyword": "roofing inspection",
+        "keyword_id": 555
+      },
+      {
+        "keyword": "roofing contractor",
+        "keyword_id": 556
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "35055"
+    }
+  },
+  {
+    "client_name": "Ryan Malham",
+    "client_id": 100,
+    "biz_name": "Hinton Buildings, Selma",
+    "biz_id": 113,
+    "biz_url": "https://share.google/o98EbpwK4GEPidSBa",
+    "city": "Selma",
+    "state": "NC",
+    "biz_address": "121 U.S. 70, Selma, NC 27576, USA",
+    "keywords": [
+      {
+        "keyword": "barns",
+        "keyword_id": 557
+      },
+      {
+        "keyword": "wood sheds",
+        "keyword_id": 558
+      },
+      {
+        "keyword": "Portable Sheds",
+        "keyword_id": 559
+      },
+      {
+        "keyword": "metal buildings",
+        "keyword_id": 560
+      },
+      {
+        "keyword": "carports",
+        "keyword_id": 561
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "27576"
+    }
+  },
+  {
+    "client_name": "Michael Turner",
+    "client_id": 101,
+    "biz_name": "Green Cooling Solutions, Lakewood Ranch",
+    "biz_id": 114,
+    "biz_url": "https://share.google/x2284BAPIokaZYEyQ",
+    "city": "Lakewood Ranch",
+    "state": "FL",
+    "biz_address": "8340 Lakewood Ranch Blvd, Lakewood Ranch, FL 34202",
+    "keywords": [
+      {
+        "keyword": "air conditioning service",
+        "keyword_id": 562
+      },
+      {
+        "keyword": "air conditioning repair",
+        "keyword_id": 563
+      },
+      {
+        "keyword": "ac repair",
+        "keyword_id": 564
+      },
+      {
+        "keyword": "air conditioning maintenance",
+        "keyword_id": 565
+      },
+      {
+        "keyword": "ac repair close to me",
+        "keyword_id": 566
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "34202"
+    }
+  },
+  {
+    "client_name": "Justin Sonntag",
+    "client_id": 102,
+    "biz_name": "Aire Serv of Northwest Florida, Navarre",
+    "biz_id": 115,
+    "biz_url": "https://share.google/FlRGHuG3Ll6PQhIQn",
+    "city": "Navarre",
+    "state": "FL",
+    "biz_address": "7053 Leisure Street, Navarre, FL 32566-6623, USA",
+    "keywords": [
+      {
+        "keyword": "air conditioner maintenance",
+        "keyword_id": 567
+      },
+      {
+        "keyword": "ac system maintenance",
+        "keyword_id": 568
+      },
+      {
+        "keyword": "air conditioning unit maintenance",
+        "keyword_id": 569
+      },
+      {
+        "keyword": "air conditioner repair",
+        "keyword_id": 570
+      },
+      {
+        "keyword": "ac maintenance",
+        "keyword_id": 571
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "32566"
+    }
+  },
+  {
+    "client_name": "Chuck Gray",
+    "client_id": 103,
+    "biz_name": "Canyon Springs Dental, Surprise",
+    "biz_id": 116,
+    "biz_url": "https://share.google/ZMQsZd3NaBDI3H3cc",
+    "city": "Surprise",
+    "state": "AZ",
+    "biz_address": "14979 W Bell Rd #150, Surprise, AZ 85374",
+    "keywords": [
+      {
+        "keyword": "emergency dentist",
+        "keyword_id": 572
+      },
+      {
+        "keyword": "dental implants near me",
+        "keyword_id": 573
+      },
+      {
+        "keyword": "dental implants",
+        "keyword_id": 574
+      },
+      {
+        "keyword": "dentist",
+        "keyword_id": 575
+      },
+      {
+        "keyword": "dental office",
+        "keyword_id": 576
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "14979"
+    }
+  },
+  {
+    "client_name": "Justin Goehring",
+    "client_id": 104,
+    "biz_name": "Bazooka Charlie's Barber Co., Bartonville",
+    "biz_id": 117,
+    "biz_url": "https://share.google/znJKjCyCzJd3zjSON",
+    "city": "Bartonville",
+    "state": "TX",
+    "biz_address": "3000 Farm to Market Road 407, Bartonville, TX 76226-9467, USA",
+    "keywords": [
+      {
+        "keyword": "kid\u2019s haircut",
+        "keyword_id": 577
+      },
+      {
+        "keyword": "men\u2019s haircut",
+        "keyword_id": 578
+      },
+      {
+        "keyword": "best barber",
+        "keyword_id": 579
+      },
+      {
+        "keyword": "best barbershop",
+        "keyword_id": 580
+      },
+      {
+        "keyword": "barbershop open Sunday",
+        "keyword_id": 581
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "76226"
+    }
+  },
+  {
+    "client_name": "Justin Goehring",
+    "client_id": 104,
+    "biz_name": "Bazooka Charlie's Barber Co., Southlake",
+    "biz_id": 118,
+    "biz_url": "https://share.google/7LkcF24YfmS23BBcC",
+    "city": "Southlake",
+    "state": "TX",
+    "biz_address": "100 N Kimball Ave 106, Southlake, TX 76092",
+    "keywords": [
+      {
+        "keyword": "men\u2019s haircut",
+        "keyword_id": 582
+      },
+      {
+        "keyword": "kid\u2019s haircut",
+        "keyword_id": 583
+      },
+      {
+        "keyword": "best barbershop",
+        "keyword_id": 584
+      },
+      {
+        "keyword": "best barber",
+        "keyword_id": 585
+      },
+      {
+        "keyword": "barbershop open Sunday",
+        "keyword_id": 586
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "76092"
+    }
+  },
+  {
+    "client_name": "Kwame Darko",
+    "client_id": 105,
+    "biz_name": "KD Buys Houses, East Hartford",
+    "biz_id": 119,
+    "biz_url": "https://share.google/T2OAhhDktBj86FoeN",
+    "city": "East Hartford",
+    "state": "CT",
+    "biz_address": "207 Arnold Drive, East Hartford, CT 06108-2911, USA",
+    "keywords": [
+      {
+        "keyword": "Get a cash offer for my house",
+        "keyword_id": 587
+      },
+      {
+        "keyword": "Sell my house fast",
+        "keyword_id": 588
+      },
+      {
+        "keyword": "Companies that buy houses for cash",
+        "keyword_id": 589
+      },
+      {
+        "keyword": "Sell my home for cash",
+        "keyword_id": 590
+      },
+      {
+        "keyword": "Cash home buyers",
+        "keyword_id": 591
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "06108"
+    }
+  },
+  {
+    "client_name": "Scott Kincaide",
+    "client_id": 106,
+    "biz_name": "KDR Dumpster Rental, Southgate",
+    "biz_id": 120,
+    "biz_url": "https://share.google/nzGXzkDzgumrj3dht",
+    "city": "Southgate",
+    "state": "MI",
+    "biz_address": "1st Avenue South, Southgate, MI 48195, USA",
+    "keywords": [
+      {
+        "keyword": "waste dumpster rental",
+        "keyword_id": 592
+      },
+      {
+        "keyword": "dumpster rental",
+        "keyword_id": 593
+      },
+      {
+        "keyword": "garbage dumpster rental",
+        "keyword_id": 594
+      },
+      {
+        "keyword": "dumpster rentals",
+        "keyword_id": 595
+      },
+      {
+        "keyword": "roll off dumpster rental",
+        "keyword_id": 596
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "48195"
+    }
+  },
+  {
+    "client_name": "Scott Kincaide",
+    "client_id": 106,
+    "biz_name": "Kincaide Roofing And Rejuvenation, Garden City",
+    "biz_id": 121,
+    "biz_url": "https://share.google/YyHPMuVmP8zy2yIRc",
+    "city": "Garden City",
+    "state": "MI",
+    "biz_address": "30247 Ford Road, Garden City, MI 48135-2368, USA",
+    "keywords": [
+      {
+        "keyword": "roofing contractors",
+        "keyword_id": 597
+      },
+      {
+        "keyword": "roofing companies",
+        "keyword_id": 598
+      },
+      {
+        "keyword": "roof replacement",
+        "keyword_id": 599
+      },
+      {
+        "keyword": "roof repair",
+        "keyword_id": 600
+      },
+      {
+        "keyword": "roofing replacement",
+        "keyword_id": 601
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "30247"
+    }
+  },
+  {
+    "client_name": "Mark Rudolf",
+    "client_id": 107,
+    "biz_name": "Vellum Architecture and Design, Asheville",
+    "biz_id": 122,
+    "biz_url": "https://share.google/lSloLzlIkCMSAgX7j",
+    "city": "Asheville",
+    "state": "NC",
+    "biz_address": "19 Bent Oak Lane, Asheville, NC 28803-3376, USA",
+    "keywords": [
+      {
+        "keyword": "custom home design",
+        "keyword_id": 602
+      },
+      {
+        "keyword": "home design",
+        "keyword_id": 603
+      },
+      {
+        "keyword": "modern home plans",
+        "keyword_id": 604
+      },
+      {
+        "keyword": "architect",
+        "keyword_id": 605
+      },
+      {
+        "keyword": "residential architect",
+        "keyword_id": 606
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "28803"
+    }
+  },
+  {
+    "client_name": "John Morgenstern",
+    "client_id": 108,
+    "biz_name": "Smart Public Adjusters, Inc, Torrance",
+    "biz_id": 123,
+    "biz_url": "https://share.google/kQ7YxxVeDvSBNdp15",
+    "city": "Torrance",
+    "state": "CA",
+    "biz_address": "18080 Crenshaw Boulevard, Torrance, CA 90504-6400, USA",
+    "keywords": [
+      {
+        "keyword": "public insurance adjuster",
+        "keyword_id": 607
+      },
+      {
+        "keyword": "insurance claims adjuster",
+        "keyword_id": 608
+      },
+      {
+        "keyword": "insurance adjusters",
+        "keyword_id": 609
+      },
+      {
+        "keyword": "claims adjuster",
+        "keyword_id": 610
+      },
+      {
+        "keyword": "property adjusters",
+        "keyword_id": 611
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "18080"
+    }
+  },
+  {
+    "client_name": "Marvin Santana",
+    "client_id": 109,
+    "biz_name": "Balkan Builders, LLC, Lake Forest Park",
+    "biz_id": 124,
+    "biz_url": "https://share.google/EFxkPVTCyI9bOvRv0",
+    "city": "Lake Forest Park",
+    "state": "WA",
+    "biz_address": "3305 NE 182nd St, Lake Forest Park, WA 98155",
+    "keywords": [
+      {
+        "keyword": "construction contractors",
+        "keyword_id": 612
+      },
+      {
+        "keyword": "renovation companies",
+        "keyword_id": 613
+      },
+      {
+        "keyword": "remodel contractors",
+        "keyword_id": 614
+      },
+      {
+        "keyword": "home construction services",
+        "keyword_id": 615
+      },
+      {
+        "keyword": "general contractors",
+        "keyword_id": 616
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "98155"
+    }
+  },
+  {
+    "client_name": "Tiffany Bayer",
+    "client_id": 110,
+    "biz_name": "Bayer Heating and Cooling, Energy",
+    "biz_id": 125,
+    "biz_url": "https://share.google/bZYebaw72Et3iqH54",
+    "city": "Energy",
+    "state": "IL",
+    "biz_address": "401 East Ford Street, Energy, IL 62933-5027, USA",
+    "keywords": [
+      {
+        "keyword": "furnace repair",
+        "keyword_id": 617
+      },
+      {
+        "keyword": "heating repair",
+        "keyword_id": 618
+      },
+      {
+        "keyword": "hvac repair",
+        "keyword_id": 619
+      },
+      {
+        "keyword": "hvac",
+        "keyword_id": 620
+      },
+      {
+        "keyword": "heating and cooling",
+        "keyword_id": 621
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "62933"
+    }
+  },
+  {
+    "client_name": "client_27",
+    "client_id": 27,
+    "biz_name": "Heavy Duty Diesel Specialists, Albany",
+    "biz_id": 33,
+    "biz_url": "https://www.google.com/maps/search/Heavy+Duty+Diesel+Specialists%2C+Albany+29133+Louisiana+43%2C+Albany%2C+LA+70711-4307%2C+USA",
+    "city": "Albany",
+    "state": "LA",
+    "biz_address": "29133 Louisiana 43, Albany, LA 70711-4307, USA",
+    "keywords": [
+      {
+        "keyword": "commercial fleet services",
+        "keyword_id": 176
+      },
+      {
+        "keyword": "wrecker service",
+        "keyword_id": 177
+      },
+      {
+        "keyword": "best roadside assistance",
+        "keyword_id": 178
+      },
+      {
+        "keyword": "diesel mechanic",
+        "keyword_id": 179
+      },
+      {
+        "keyword": "mobile diesel mechanic",
+        "keyword_id": 180
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "70711"
+    }
+  },
+  {
+    "client_name": "client_27",
+    "client_id": 27,
+    "biz_name": "Heavy Duty Diesel Specialists, Port Allen",
+    "biz_id": 35,
+    "biz_url": "https://www.google.com/maps/search/Heavy+Duty+Diesel+Specialists%2C+Port+Allen+751+North+Lobdell+Highway%2C+Port+Allen%2C+LA+70767-4146%2C+USA",
+    "city": "Port Allen",
+    "state": "LA",
+    "biz_address": "751 North Lobdell Highway, Port Allen, LA 70767-4146, USA",
+    "keywords": [
+      {
+        "keyword": "commercial fleet services",
+        "keyword_id": 181
+      },
+      {
+        "keyword": "wrecker service",
+        "keyword_id": 182
+      },
+      {
+        "keyword": "best roadside assistance",
+        "keyword_id": 183
+      },
+      {
+        "keyword": "mobile diesel mechanic",
+        "keyword_id": 184
+      },
+      {
+        "keyword": "diesel mechanic",
+        "keyword_id": 185
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "70767"
+    }
+  },
+  {
+    "client_name": "client_37",
+    "client_id": 37,
+    "biz_name": "Atlanta Basement Design, Roswell",
+    "biz_id": 43,
+    "biz_url": "https://www.google.com/maps/search/Atlanta+Basement+Design%2C+Roswell+6000+Medlock+Bridge+Pkwy%2C+Johns+Creek%2C+GA+30022",
+    "city": "Johns Creek",
+    "state": "GA",
+    "biz_address": "6000 Medlock Bridge Pkwy, Johns Creek, GA 30022",
+    "keywords": [
+      {
+        "keyword": "basement remodeling",
+        "keyword_id": 211
+      },
+      {
+        "keyword": "basement finishing",
+        "keyword_id": 213
+      },
+      {
+        "keyword": "Basement Remodeling Contractors",
+        "keyword_id": 214
+      },
+      {
+        "keyword": "Full Service Basement Finishing",
+        "keyword_id": 215
+      },
+      {
+        "keyword": "basement finishing companies",
+        "keyword_id": 216
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "30022"
+    }
+  },
+  {
+    "client_name": "Client 15",
+    "client_id": 15,
+    "biz_name": "GYMGUYZ Silicon Valley, Palo Alto",
+    "biz_id": 20,
+    "biz_url": "https://www.google.com/maps/search/GYMGUYZ+Silicon+Valley%2C+Palo+Alto+568+Loma+Verde+Avenue%2C+Palo+Alto%2C+CA+94306%2C+USA",
+    "city": "Palo Alto",
+    "state": "CA",
+    "biz_address": "568 Loma Verde Avenue, Palo Alto, CA 94306, USA",
+    "keywords": [
+      {
+        "keyword": "Personal trainer near me",
+        "keyword_id": 111
+      },
+      {
+        "keyword": "In-home chef and meal prep service",
+        "keyword_id": 112
+      },
+      {
+        "keyword": "Women\u2019s in-home fitness programs",
+        "keyword_id": 115
+      },
+      {
+        "keyword": "Senior fitness and fall prevention training",
+        "keyword_id": 113
+      },
+      {
+        "keyword": "Corporate wellness and workplace fitness programs",
+        "keyword_id": 114
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "94306"
+    }
+  },
+  {
+    "client_name": "Client 18",
+    "client_id": 18,
+    "biz_name": "Daniels Mobile Detailing | Lexington Mobile Detailing, Winchester",
+    "biz_id": 23,
+    "biz_url": "https://www.google.com/maps/search/Daniels+Mobile+Detailing+%7C+Lexington+Mobile+Detailing%2C+Winchester+217+South+Main+Street%2C+Winchester%2C+KY+40391-2455%2C+USA",
+    "city": "Winchester",
+    "state": "KY",
+    "biz_address": "217 South Main Street, Winchester, KY 40391-2455, USA",
+    "keywords": [
+      {
+        "keyword": "car detailing near me",
+        "keyword_id": 126
+      },
+      {
+        "keyword": "detailing near me",
+        "keyword_id": 129
+      },
+      {
+        "keyword": "mobile detailing near me",
+        "keyword_id": 128
+      },
+      {
+        "keyword": "auto detailing near me",
+        "keyword_id": 127
+      },
+      {
+        "keyword": "mobile car detailing near me",
+        "keyword_id": 130
+      }
+    ],
+    "proxy": {
+      "session_duration": 30,
+      "country": "us",
+      "zip": "40391"
+    }
+  }
+]
