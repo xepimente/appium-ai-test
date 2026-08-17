@@ -58,6 +58,11 @@ PROXY_HOST     = os.environ.get("PROXY_HOST", "gate.decodo.com")
 PROXY_PORT     = int(os.environ.get("PROXY_PORT", "10001"))
 PROXY_BASE_USER = os.environ.get("PROXY_BASE_USER", "user-spknlt0736")
 PROXY_PASSWORD  = os.environ.get("PROXY_PASSWORD", "")
+# Which upstream residential provider's username scheme to build. "decodo" (default)
+# uses -session-<sid>-...-country-us[-zip-X]; "dataimpulse" uses the __cr.us[__region.X]
+# __sid.<sid> suffix scheme. DataImpulse has NO zip targeting — state (region) is the
+# finest tier, so zip-tier probing is skipped for it.
+PROXY_PROVIDER  = os.environ.get("PROXY_PROVIDER", "decodo").lower()
 
 GOST_BINARY = shutil.which("gost") or "/opt/homebrew/bin/gost"
 
@@ -123,8 +128,18 @@ def build_upstream_username(
 ) -> str:
     """Build Decodo sticky-session username. Targeting precedence:
     zip (if given) else region (if given) else country-only.
-    Decodo keywords used: country, zip, region (full state name, underscores)."""
+    Decodo keywords used: country, zip, region (full state name, underscores).
+
+    DataImpulse scheme (PROXY_PROVIDER=dataimpulse): __cr.<country>[__region.<state>]
+    __sid.<sid>. DataImpulse has no zip targeting, so zip_code is ignored and state
+    (region) is the finest tier; region is emitted with underscores stripped."""
     sid = session_id or _random_session_id()
+    if PROXY_PROVIDER == "dataimpulse":
+        di = [f"{PROXY_BASE_USER}__cr.{country}"]
+        if region:
+            di.append(f"__region.{region.replace('_', '')}")
+        di.append(f"__sid.{sid}")
+        return "".join(di)
     parts = [
         PROXY_BASE_USER,
         f"session-{sid}",
@@ -306,6 +321,27 @@ class GostManager:
             if spec.tier == "port":
                 print(f"[gost]   {spec.device_id}: tier=port (upstream :{spec.upstream_port}) — no probe needed")
                 new_specs.append(spec)
+                continue
+            # DataImpulse: no zip targeting. State (region) is the finest tier —
+            # probe it if known (verifies the key authenticates), else country.
+            if PROXY_PROVIDER == "dataimpulse":
+                if spec.region:
+                    region_probe = build_upstream_username(
+                        country=spec.country, session_id=_random_session_id(),
+                        region=spec.region,
+                    )
+                    picked_tier = "region" if _probe_decodo_upstream(region_probe) else "country"
+                else:
+                    picked_tier = "country"
+                picked_user = build_upstream_username(
+                    country=spec.country, session_id=spec.session_id,
+                    region=(spec.region if picked_tier == "region" else ""),
+                )
+                time.sleep(0.6)
+                print(f"[gost]   {spec.device_id}: dataimpulse region={spec.region or '-'} "
+                      f"→ using tier={picked_tier}")
+                new_specs.append(replace(spec, upstream_user=picked_user, tier=picked_tier))
+                self.mapping[spec.device_id]["tier"] = picked_tier
                 continue
             # Probe zip only. If zip RSTs, fall back without further probing
             # (region is valid when state is known; country always works). Extra
