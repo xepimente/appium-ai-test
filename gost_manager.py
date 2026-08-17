@@ -134,6 +134,10 @@ def build_upstream_username(
     __sid.<sid>. DataImpulse has no zip targeting, so zip_code is ignored and state
     (region) is the finest tier; region is emitted with underscores stripped."""
     sid = session_id or _random_session_id()
+    if PROXY_PROVIDER == "rayobyte":
+        # Rayobyte targets via the PASSWORD (built in _build_yaml_config), so the
+        # username is just the plain account.
+        return PROXY_BASE_USER
     if PROXY_PROVIDER == "dataimpulse":
         di = [f"{PROXY_BASE_USER}__cr.{country}"]
         if region:
@@ -184,6 +188,7 @@ class ListenerSpec:
     zip_code: str
     region: str
     country: str
+    city: str
     session_duration: int
     session_id: str
     upstream_user: str
@@ -230,6 +235,7 @@ class GostManager:
             zip_code = str(dev.get("zip") or "10001")
             region   = resolve_region(dev.get("state") or dev.get("region") or "")
             country  = dev.get("country", DEFAULT_COUNTRY)
+            city     = dev.get("city") or ""
             duration = int(dev.get("session_duration", DEFAULT_SESSION_DURATION))
             sid      = dev.get("session_id") or _random_session_id()
             # Port-based mode: dev may specify an upstream_port (e.g. 10003-10007
@@ -248,6 +254,7 @@ class GostManager:
                 zip_code=zip_code,
                 region=region,
                 country=country,
+                city=city,
                 session_duration=duration,
                 session_id=sid,
                 upstream_user=upstream,
@@ -288,6 +295,17 @@ class GostManager:
         lines.append("chains:")
         for i, spec in enumerate(self.specs):
             upstream_port = spec.upstream_port or PROXY_PORT
+            # Rayobyte uses an HTTP upstream (:8000) and targets via the password
+            # (country + zip + sticky session); everyone else is socks5 + global pass.
+            if PROXY_PROVIDER == "rayobyte":
+                ctype = "http"
+                if spec.country == "ca":
+                    geo = "-country-CA" + (f"-city-{spec.city.replace(' ', '_')}" if spec.city else "")
+                else:
+                    geo = "-country-US" + (f"-zip-{spec.zip_code}" if spec.zip_code and spec.zip_code != "10001" else "")
+                upass = f"{PROXY_PASSWORD}{geo}-session-{spec.session_id}"
+            else:
+                ctype = "socks5"; upass = PROXY_PASSWORD
             lines += [
                 f"  - name: chain-{i}",
                 f"    hops:",
@@ -296,10 +314,10 @@ class GostManager:
                 f"          - name: decodo-{i}",
                 f"            addr: {PROXY_HOST}:{upstream_port}",
                 f"            connector:",
-                f"              type: socks5",
+                f"              type: {ctype}",
                 f"              auth:",
                 f'                username: "{spec.upstream_user}"',
-                f'                password: "{PROXY_PASSWORD}"',
+                f'                password: "{upass}"',
                 f"            dialer:",
                 f"              type: tcp",
             ]
@@ -321,6 +339,18 @@ class GostManager:
             if spec.tier == "port":
                 print(f"[gost]   {spec.device_id}: tier=port (upstream :{spec.upstream_port}) — no probe needed")
                 new_specs.append(spec)
+                continue
+            # Rayobyte: zip targeting lives in the password (_build_yaml_config), and
+            # Rayobyte handles zip coverage itself — no Decodo-style probe. Use zip when
+            # we have one, else country.
+            if PROXY_PROVIDER == "rayobyte":
+                if spec.country == "ca":
+                    picked_tier = "city" if spec.city else "country"
+                else:
+                    picked_tier = "zip" if (spec.zip_code and spec.zip_code != "10001") else "country"
+                print(f"[gost]   {spec.device_id}: rayobyte {spec.country} city={spec.city or '-'} zip={spec.zip_code or '-'} → tier={picked_tier}")
+                new_specs.append(replace(spec, tier=picked_tier))
+                self.mapping[spec.device_id]["tier"] = picked_tier
                 continue
             # DataImpulse: no zip targeting. State (region) is the finest tier —
             # probe it if known (verifies the key authenticates), else country.
